@@ -3,9 +3,10 @@
 Implements deterministic serialization for Unity YAML files by:
 1. Sorting documents by fileID
 2. Sorting m_Modifications arrays
-3. Normalizing floating-point values
-4. Normalizing quaternions (w >= 0)
-5. Preserving original fileIDs for external reference compatibility
+3. Sorting order-independent arrays (m_Component, m_Children) by fileID
+4. Normalizing floating-point values
+5. Normalizing quaternions (w >= 0)
+6. Preserving original fileIDs for external reference compatibility
 """
 
 from __future__ import annotations
@@ -39,6 +40,12 @@ FLOAT_PROPERTIES_HEX = {
     "m_Center",
     "m_Size",
     "m_Offset",
+}
+
+# Properties that contain order-independent arrays of references (should be sorted)
+ORDER_INDEPENDENT_ARRAYS = {
+    "m_Component",      # GameObject's component list
+    "m_Children",       # Transform's children list
 }
 
 
@@ -172,6 +179,29 @@ class UnityPrefabNormalizer:
         ref_type = target.get("type", 0) if isinstance(target, dict) else 0
         return (file_id, guid, ref_type)
 
+    def _sort_reference_array(self, arr: list[Any]) -> None:
+        """Sort an array of references by fileID for deterministic order.
+
+        Handles arrays like m_Component and m_Children which contain
+        references in the format: {component: {fileID: X}} or {fileID: X}
+        """
+        def get_sort_key(item: Any) -> int:
+            if isinstance(item, dict):
+                # Handle {component: {fileID: X}} format (m_Component)
+                if "component" in item:
+                    ref = item["component"]
+                    if isinstance(ref, dict):
+                        return ref.get("fileID", 0)
+                # Handle {fileID: X} format (m_Children)
+                if "fileID" in item:
+                    return item.get("fileID", 0)
+            return 0
+
+        # Sort in place
+        sorted_items = sorted(arr, key=get_sort_key)
+        arr.clear()
+        arr.extend(sorted_items)
+
     def _normalize_value(
         self, value: Any, parent_key: str | None = None, property_path: str = ""
     ) -> Any:
@@ -197,6 +227,10 @@ class UnityPrefabNormalizer:
             return value
 
         elif isinstance(value, (list, CommentedSeq)):
+            # Sort order-independent arrays (like m_Component, m_Children)
+            if parent_key in ORDER_INDEPENDENT_ARRAYS and value:
+                self._sort_reference_array(value)
+
             # Recursively normalize list items
             for i, item in enumerate(value):
                 value[i] = self._normalize_value(
