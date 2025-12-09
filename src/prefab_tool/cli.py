@@ -367,6 +367,37 @@ def query(
         click.echo(f"  ... and {len(doc.objects) - 10} more objects")
 
 
+@main.command(name="git-textconv")
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+def git_textconv(file: Path) -> None:
+    """Output normalized content for git diff textconv.
+
+    This command is designed to be used as a git textconv filter.
+    It outputs the normalized YAML to stdout for git to compare.
+
+    Setup in .gitconfig:
+
+        [diff "unity"]
+            textconv = prefab-tool git-textconv
+
+    Setup in .gitattributes:
+
+        *.prefab diff=unity
+        *.unity diff=unity
+        *.asset diff=unity
+    """
+    normalizer = UnityPrefabNormalizer()
+
+    try:
+        content = normalizer.normalize_file(file)
+        # Output to stdout without trailing message
+        sys.stdout.write(content)
+    except Exception as e:
+        # On error, output original file content so git can still diff
+        click.echo(f"# Error normalizing: {e}", err=True)
+        sys.stdout.write(file.read_text(encoding="utf-8"))
+
+
 @main.command(name="merge")
 @click.argument("base", type=click.Path(exists=True, path_type=Path))
 @click.argument("ours", type=click.Path(exists=True, path_type=Path))
@@ -393,21 +424,27 @@ def merge_files(
 
     This command is designed to work as a git merge driver.
 
-    BASE is the common ancestor file.
-    OURS is the current branch version.
-    THEIRS is the version being merged.
+    BASE is the common ancestor file (%O).
+    OURS is the current branch version (%A).
+    THEIRS is the version being merged (%B).
 
-    Examples:
+    Exit codes:
+        0 = merge successful
+        1 = conflict (manual resolution needed)
 
-        # Manual merge
-        prefab-tool merge base.prefab ours.prefab theirs.prefab -o merged.prefab
+    Setup in .gitconfig:
 
-        # Git merge driver usage (in .gitconfig):
-        # [merge "unityyamlmerge"]
-        #     driver = prefab-tool merge %O %A %B -o %A --path %P
+        [merge "unity"]
+            name = Unity YAML Merge
+            driver = prefab-tool merge %O %A %B -o %A --path %P
+
+    Setup in .gitattributes:
+
+        *.prefab merge=unity
+        *.unity merge=unity
+        *.asset merge=unity
     """
-    # TODO: Implement proper semantic merge
-    # For now, normalize and use line-based merge
+    from prefab_tool.merge import three_way_merge
 
     normalizer = UnityPrefabNormalizer()
 
@@ -419,46 +456,19 @@ def merge_files(
         click.echo(f"Error: Failed to normalize files: {e}", err=True)
         sys.exit(1)
 
-    # Simple line-based 3-way merge
-    import difflib
-
-    base_lines = base_content.splitlines(keepends=True)
-    ours_lines = ours_content.splitlines(keepends=True)
-    theirs_lines = theirs_content.splitlines(keepends=True)
-
-    # Use SequenceMatcher for basic merge
-    # This is a simplified merge - production would need semantic merge
-    if ours_content == theirs_content:
-        # No conflict - both sides made same changes
-        result = ours_content
-        has_conflict = False
-    elif ours_content == base_content:
-        # We didn't change, take theirs
-        result = theirs_content
-        has_conflict = False
-    elif theirs_content == base_content:
-        # They didn't change, keep ours
-        result = ours_content
-        has_conflict = False
-    else:
-        # Both sides changed - try diff3-style merge
-        # For now, just report conflict
-        click.echo(
-            "Warning: Both branches modified the file. Manual resolution may be needed.",
-            err=True,
-        )
-        # Take ours for now and exit with conflict status
-        result = ours_content
-        has_conflict = True
+    # Perform 3-way merge
+    result, has_conflict = three_way_merge(base_content, ours_content, theirs_content)
 
     output_path = output or ours
     output_path.write_text(result, encoding="utf-8", newline="\n")
 
+    display_path = file_path or str(output_path)
+
     if has_conflict:
-        click.echo(f"Conflict: {file_path or ours}", err=True)
+        click.echo(f"Conflict: {display_path} (manual resolution needed)", err=True)
         sys.exit(1)
     else:
-        click.echo(f"Merged: {file_path or ours}")
+        # Silent success for git integration (git expects no output on success)
         sys.exit(0)
 
 
