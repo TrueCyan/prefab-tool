@@ -92,23 +92,21 @@ set_value(doc, "gameObjects/100000/m_Name", "NewName")
 
 **rapidyaml 백엔드 (`fast_parser.py`)**
 
-| 백엔드 | 처리 시간 | 처리량 | 비고 |
-|--------|----------|--------|------|
-| ruamel.yaml | 1,661ms | 114 KB/s | 기본 |
-| **rapidyaml** | **48ms** | **3,985 KB/s** | **35x 빠름** |
+rapidyaml을 기본 YAML 파서로 사용하여 고성능 파싱 제공:
+- **처리 시간**: ~48ms (189KB 파일 기준)
+- **처리량**: ~3,985 KB/s
+- Python 순수 파서 대비 **35배 빠름**
 
 설치:
 ```bash
-pip install prefab-tool[fast]
+pip install prefab-tool
 ```
 
-자동 감지되어 사용됨. 수동 전환:
+백엔드 확인:
 ```python
-from prefab_tool.parser import set_parser_backend, get_parser_backend
+from prefab_tool.parser import get_parser_backend
 
-set_parser_backend(use_fast=True)   # rapidyaml
-set_parser_backend(use_fast=False)  # ruamel.yaml
-print(get_parser_backend())  # "rapidyaml" or "ruamel.yaml"
+print(get_parser_backend())  # "rapidyaml"
 ```
 
 ## CLI 명령어
@@ -156,8 +154,8 @@ pytest tests/ --cov=prefab_tool --cov-report=html
 prefab-tool/
 ├── src/prefab_tool/
 │   ├── __init__.py
-│   ├── parser.py        # Unity YAML 파서 (dual backend)
-│   ├── fast_parser.py   # rapidyaml 백엔드
+│   ├── parser.py        # Unity YAML 파서
+│   ├── fast_parser.py   # rapidyaml 파싱 구현
 │   ├── normalizer.py    # 정규화 로직
 │   ├── validator.py     # 검증 로직
 │   ├── diff.py          # 비교 로직
@@ -261,10 +259,11 @@ prefab-tool stats Assets/
 
 ## 알려진 제한사항
 
-1. **YAML 1.1 특수 케이스**: 일부 극단적인 YAML 1.1 구문이 rapidyaml에서 다르게 처리될 수 있음
+1. **YAML 1.1 특수 케이스**: 일부 극단적인 YAML 1.1 구문이 다르게 처리될 수 있음 (Unity 파일에서는 거의 발생하지 않음)
 2. **대용량 파일**: 100MB 이상 파일은 메모리 사용량 주의
 3. **바이너리 데이터**: base64 인코딩된 바이너리는 정규화하지 않음
 4. **Unity 버전**: Unity 2019+ 테스트됨, 이전 버전은 미확인
+5. **rapidyaml 필수**: rapidyaml 라이브러리가 설치되어야 함 (기본 종속성)
 
 ---
 
@@ -276,7 +275,7 @@ git clone https://github.com/TrueCyan/prefab-tool
 cd prefab-tool
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[all]"
+pip install -e ".[dev]"
 
 # 테스트 실행
 pytest tests/
