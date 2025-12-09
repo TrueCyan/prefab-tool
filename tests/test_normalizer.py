@@ -202,6 +202,60 @@ class TestRoundTrip:
         assert file_ids == sorted(file_ids)
 
 
+class TestComponentArraySorting:
+    """Tests for order-independent array sorting (m_Component, m_Children)."""
+
+    def test_sort_component_array(self):
+        """Test that m_Component arrays are sorted by fileID."""
+        normalizer = UnityPrefabNormalizer()
+
+        # Check if Player prefabs exist (they contain unsorted m_Component)
+        player_original = FIXTURES_DIR / "Player_original.prefab"
+        player_modified = FIXTURES_DIR / "Player_modification.prefab"
+
+        if player_original.exists() and player_modified.exists():
+            # These two files differ only in m_Component order
+            content1 = normalizer.normalize_file(player_original)
+            content2 = normalizer.normalize_file(player_modified)
+
+            # After normalization, they should be identical
+            assert content1 == content2
+
+    def test_children_array_sorted(self):
+        """Test that m_Children arrays are sorted by fileID."""
+        normalizer = UnityPrefabNormalizer()
+        doc = UnityYAMLDocument.load(FIXTURES_DIR / "unsorted_prefab.prefab")
+
+        normalizer.normalize_document(doc)
+
+        # Find the parent transform (has children)
+        parent_transform = doc.get_by_file_id(400000)
+        content = parent_transform.get_content()
+        children = content.get("m_Children", [])
+
+        if len(children) > 1:
+            # Children should be sorted by fileID
+            child_ids = [c.get("fileID", 0) for c in children]
+            assert child_ids == sorted(child_ids)
+
+
+class TestFunctionalEquivalence:
+    """Tests for functionally equivalent prefabs producing identical output."""
+
+    def test_functionally_identical_prefabs(self):
+        """Test that functionally identical prefabs normalize to same output."""
+        normalizer = UnityPrefabNormalizer()
+
+        player_original = FIXTURES_DIR / "Player_original.prefab"
+        player_modified = FIXTURES_DIR / "Player_modification.prefab"
+
+        if player_original.exists() and player_modified.exists():
+            content1 = normalizer.normalize_file(player_original)
+            content2 = normalizer.normalize_file(player_modified)
+
+            assert content1 == content2, "Functionally identical prefabs should produce identical normalized output"
+
+
 class TestConvenienceFunction:
     """Tests for the normalize_prefab convenience function."""
 
