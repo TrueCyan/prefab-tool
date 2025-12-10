@@ -467,6 +467,7 @@ def generate_file_id(existing_ids: set[int] | None = None) -> int:
     # Ensure uniqueness if existing_ids provided
     if existing_ids:
         while file_id in existing_ids:
+            _file_id_counter += 1
             random_part = random.randint(1000000, 9999999)
             file_id = timestamp_part * 10000000 + random_part + _file_id_counter
 
