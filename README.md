@@ -221,7 +221,7 @@ doc.save("MyObject.prefab")
 ## CLI 명령어 요약
 
 ```bash
-prefab-tool setup       # Git 통합 설정 (단일 명령어)
+prefab-tool setup       # Git 통합 설정
 prefab-tool normalize   # Unity YAML 파일 정규화
 prefab-tool validate    # 구조적 무결성 검증
 prefab-tool diff        # 두 파일 비교
