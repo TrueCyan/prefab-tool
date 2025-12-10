@@ -751,6 +751,155 @@ def git_textconv(file: Path) -> None:
         sys.stdout.write(file.read_text(encoding="utf-8"))
 
 
+@main.command(name="install-hooks")
+@click.option(
+    "--pre-commit",
+    "use_pre_commit",
+    is_flag=True,
+    help="Install using pre-commit framework (requires pre-commit)",
+)
+@click.option(
+    "--git-hooks",
+    is_flag=True,
+    help="Install native git pre-commit hook (no dependencies)",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite existing hooks",
+)
+def install_hooks(
+    use_pre_commit: bool,
+    git_hooks: bool,
+    force: bool,
+) -> None:
+    """Install pre-commit hooks for automatic normalization.
+
+    Two installation methods are available:
+
+    1. pre-commit framework (recommended):
+       Requires the 'pre-commit' package to be installed.
+       Creates a .pre-commit-config.yaml file.
+
+    2. Native git hooks:
+       Creates a git pre-commit hook directly.
+       No additional dependencies required.
+
+    Examples:
+
+        # Install using pre-commit framework
+        prefab-tool install-hooks --pre-commit
+
+        # Install native git hook
+        prefab-tool install-hooks --git-hooks
+
+        # Overwrite existing hooks
+        prefab-tool install-hooks --git-hooks --force
+    """
+    import subprocess
+
+    if not is_git_repository():
+        click.echo("Error: Not in a git repository", err=True)
+        sys.exit(1)
+
+    repo_root = get_repo_root()
+    if not repo_root:
+        click.echo("Error: Could not find git repository root", err=True)
+        sys.exit(1)
+
+    if not use_pre_commit and not git_hooks:
+        click.echo("Error: Specify --pre-commit or --git-hooks", err=True)
+        click.echo()
+        click.echo("Options:")
+        click.echo("  --pre-commit  Use pre-commit framework (recommended)")
+        click.echo("  --git-hooks   Use native git hook (no dependencies)")
+        sys.exit(1)
+
+    if use_pre_commit:
+        # Check if pre-commit is installed
+        try:
+            subprocess.run(["pre-commit", "--version"], capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            click.echo("Error: pre-commit is not installed", err=True)
+            click.echo("Install it with: pip install pre-commit", err=True)
+            sys.exit(1)
+
+        config_path = repo_root / ".pre-commit-config.yaml"
+        if config_path.exists() and not force:
+            content = config_path.read_text()
+            if "prefab-tool" in content:
+                click.echo("prefab-tool hook already configured in .pre-commit-config.yaml")
+                return
+            click.echo("Found existing .pre-commit-config.yaml")
+            click.echo("Add prefab-tool manually or use --force to overwrite")
+            sys.exit(1)
+
+        config_content = """\
+# See https://pre-commit.com for more information
+repos:
+  # Unity Prefab Normalizer
+  - repo: https://github.com/TrueCyan/prefab-tool
+    rev: v0.1.0
+    hooks:
+      - id: prefab-normalize
+      # - id: prefab-validate  # Optional: add validation
+"""
+        config_path.write_text(config_content)
+        click.echo(f"Created: {config_path}")
+
+        # Run pre-commit install
+        try:
+            subprocess.run(["pre-commit", "install"], cwd=repo_root, check=True)
+            click.echo("Installed pre-commit hooks")
+        except subprocess.CalledProcessError:
+            click.echo("Warning: Failed to run 'pre-commit install'", err=True)
+            click.echo("Run it manually: pre-commit install", err=True)
+
+        click.echo()
+        click.echo("Pre-commit hook installed successfully!")
+        click.echo("Test with: pre-commit run --all-files")
+
+    if git_hooks:
+        hooks_dir = repo_root / ".git" / "hooks"
+        hook_path = hooks_dir / "pre-commit"
+
+        if hook_path.exists() and not force:
+            click.echo(f"Error: Hook already exists: {hook_path}", err=True)
+            click.echo("Use --force to overwrite", err=True)
+            sys.exit(1)
+
+        hook_content = """\
+#!/bin/bash
+# prefab-tool pre-commit hook
+# Automatically normalize Unity YAML files before commit
+
+set -e
+
+# Get list of staged Unity files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(prefab|unity|asset)$' || true)
+
+if [ -n "$STAGED_FILES" ]; then
+    echo "Normalizing Unity files..."
+
+    # Normalize each staged file
+    for file in $STAGED_FILES; do
+        if [ -f "$file" ]; then
+            prefab-tool normalize "$file" --in-place
+            git add "$file"
+        fi
+    done
+
+    echo "Unity files normalized."
+fi
+"""
+        hook_path.write_text(hook_content)
+        hook_path.chmod(0o755)
+        click.echo(f"Created: {hook_path}")
+        click.echo()
+        click.echo("Git pre-commit hook installed successfully!")
+        click.echo("Unity files will be normalized automatically on commit.")
+
+
 @main.command(name="merge")
 @click.argument("base", type=click.Path(exists=True, path_type=Path))
 @click.argument("ours", type=click.Path(exists=True, path_type=Path))

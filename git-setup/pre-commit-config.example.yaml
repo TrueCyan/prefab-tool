@@ -1,0 +1,32 @@
+# Example .pre-commit-config.yaml for Unity projects
+# See https://pre-commit.com for more information
+#
+# Copy this file to your Unity project root as .pre-commit-config.yaml
+# Then run: pre-commit install
+
+repos:
+  # Unity Prefab Normalizer - eliminates VCS noise from Unity files
+  - repo: https://github.com/TrueCyan/prefab-tool
+    rev: v0.1.0  # Use the latest tag
+    hooks:
+      # Option 1: Normalize all staged Unity files (recommended)
+      - id: prefab-normalize
+        # Uncomment to limit to specific directories:
+        # files: ^Assets/(Prefabs|Scenes)/
+
+      # Option 2: Use incremental normalization (faster for large projects)
+      # - id: prefab-normalize-staged
+
+      # Option 3: Add validation (catches errors before commit)
+      # - id: prefab-validate
+
+  # Other useful hooks for Unity projects:
+  # - repo: https://github.com/pre-commit/pre-commit-hooks
+  #   rev: v4.5.0
+  #   hooks:
+  #     - id: trailing-whitespace
+  #       exclude: \.(prefab|unity|asset|meta)$
+  #     - id: end-of-file-fixer
+  #       exclude: \.(prefab|unity|asset|meta)$
+  #     - id: check-yaml
+  #       exclude: \.(prefab|unity|asset|meta)$
