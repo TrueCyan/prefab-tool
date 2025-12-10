@@ -1,0 +1,26 @@
+# pre-commit hooks for prefab-tool
+# See https://pre-commit.com for more information
+
+- id: prefab-normalize
+  name: Normalize Unity prefabs
+  description: Normalize Unity YAML files for deterministic serialization
+  entry: prefab-tool normalize --in-place
+  language: python
+  files: \.(prefab|unity|asset)$
+  types: [file]
+
+- id: prefab-normalize-staged
+  name: Normalize Unity prefabs (staged only)
+  description: Normalize only staged Unity YAML files
+  entry: prefab-tool normalize --changed-only --staged-only
+  language: python
+  pass_filenames: false
+  always_run: true
+
+- id: prefab-validate
+  name: Validate Unity prefabs
+  description: Validate Unity YAML files for structural correctness
+  entry: prefab-tool validate
+  language: python
+  files: \.(prefab|unity|asset)$
+  types: [file]

@@ -181,6 +181,63 @@ changed = get_files_changed_since("HEAD~5")
 changed = get_files_changed_since("main")
 ```
 
+### Phase 6: Pre-commit Hook 통합 ✅
+
+**pre-commit 프레임워크 지원 (`.pre-commit-hooks.yaml`)**
+
+커밋 전 자동 정규화를 위한 pre-commit 프레임워크 통합:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/TrueCyan/prefab-tool
+    rev: v0.1.0
+    hooks:
+      - id: prefab-normalize        # 스테이징된 Unity 파일 정규화
+      # - id: prefab-normalize-staged # 증분 정규화 (--changed-only --staged-only)
+      # - id: prefab-validate         # 유효성 검증
+```
+
+**사용 가능한 Hook**
+| Hook ID | 설명 |
+|---------|------|
+| `prefab-normalize` | 스테이징된 모든 Unity 파일 정규화 |
+| `prefab-normalize-staged` | `--changed-only --staged-only` 옵션 사용 |
+| `prefab-validate` | Unity 파일 구조 유효성 검증 |
+
+**CLI를 통한 설치 (`cli.py: install-hooks`)**
+```bash
+# pre-commit 프레임워크 사용 (권장)
+prefab-tool install-hooks --pre-commit
+
+# 네이티브 git hook 사용 (의존성 없음)
+prefab-tool install-hooks --git-hooks
+
+# 기존 hook 덮어쓰기
+prefab-tool install-hooks --git-hooks --force
+```
+
+**설치 스크립트를 통한 설정**
+```bash
+# git-setup/install.sh를 사용한 설정
+./git-setup/install.sh pre-commit
+```
+
+**수동 설정**
+```bash
+# 1. pre-commit 설치
+pip install pre-commit
+
+# 2. .pre-commit-config.yaml 생성 (예제 참조)
+cp git-setup/pre-commit-config.example.yaml .pre-commit-config.yaml
+
+# 3. hook 설치
+pre-commit install
+
+# 4. 테스트
+pre-commit run --all-files
+```
+
 ## CLI 명령어
 
 ```bash
@@ -211,6 +268,10 @@ prefab-tool git-textconv input.prefab
 
 # 3-way 병합
 prefab-tool merge base.prefab ours.prefab theirs.prefab -o merged.prefab
+
+# Pre-commit hook 설치
+prefab-tool install-hooks --pre-commit    # pre-commit 프레임워크 사용
+prefab-tool install-hooks --git-hooks     # 네이티브 git hook 사용
 ```
 
 ## 테스트
@@ -250,36 +311,22 @@ prefab-tool/
 
 ## 향후 개선 사항
 
-### 높은 우선순위
-
-#### 1. Pre-commit Hook 통합
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: local
-    hooks:
-      - id: prefab-normalize
-        name: Normalize Unity prefabs
-        entry: prefab-tool normalize --in-place
-        files: \.(prefab|unity)$
-```
-
 ### 중간 우선순위
 
-#### 2. 씬 파일 최적화
+#### 1. 씬 파일 최적화
 씬 파일은 프리팹보다 훨씬 크고 복잡함. 추가 최적화 필요:
 - 스트리밍 파싱 (메모리 효율)
 - 병렬 처리
 - 청크 기반 정규화
 
-#### 3. 바이너리 에셋 참조 추적
+#### 2. 바이너리 에셋 참조 추적
 프리팹이 참조하는 바이너리 에셋(텍스처, 메시 등) 추적:
 ```bash
 prefab-tool deps Player.prefab
 # 출력: Textures/player.png, Meshes/player.fbx, ...
 ```
 
-#### 4. 통계 및 분석
+#### 3. 통계 및 분석
 ```bash
 prefab-tool stats Assets/
 # 출력:
@@ -291,17 +338,17 @@ prefab-tool stats Assets/
 
 ### 낮은 우선순위
 
-#### 5. GUI 도구
+#### 4. GUI 도구
 - VS Code 확장
 - Unity Editor 통합
 - 웹 기반 뷰어
 
-#### 6. 협업 기능
+#### 5. 협업 기능
 - 프리팹 잠금 (Lock)
 - 변경 알림
 - 리뷰 도구
 
-#### 7. 추가 포맷 지원
+#### 6. 추가 포맷 지원
 - ScriptableObject (.asset)
 - AnimationClip (.anim)
 - Material (.mat)
