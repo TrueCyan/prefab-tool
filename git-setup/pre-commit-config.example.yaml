@@ -25,8 +25,8 @@ repos:
   #   rev: v4.5.0
   #   hooks:
   #     - id: trailing-whitespace
-  #       exclude: \.(prefab|unity|asset|meta)$
+  #       exclude: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams|meta)$
   #     - id: end-of-file-fixer
-  #       exclude: \.(prefab|unity|asset|meta)$
+  #       exclude: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams|meta)$
   #     - id: check-yaml
-  #       exclude: \.(prefab|unity|asset|meta)$
+  #       exclude: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams|meta)$

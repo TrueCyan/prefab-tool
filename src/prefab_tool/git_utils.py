@@ -11,7 +11,68 @@ from typing import Sequence
 
 
 # Unity YAML file extensions that can be normalized
-UNITY_EXTENSIONS = {".prefab", ".unity", ".asset", ".mat", ".anim", ".controller"}
+# Core assets
+UNITY_CORE_EXTENSIONS = {
+    ".prefab",      # Prefab files
+    ".unity",       # Scene files
+    ".asset",       # ScriptableObject and generic assets
+}
+
+# Animation & control
+UNITY_ANIMATION_EXTENSIONS = {
+    ".anim",                # Animation clips
+    ".controller",          # Animator Controller
+    ".overrideController",  # Animator Override Controller
+    ".playable",            # Playable assets (Timeline, etc.)
+    ".mask",                # Avatar masks
+    ".signal",              # Timeline Signal assets
+}
+
+# Materials & rendering
+UNITY_RENDERING_EXTENSIONS = {
+    ".mat",             # Materials
+    ".renderTexture",   # Render Textures
+    ".flare",           # Lens flare assets
+    ".shadervariants",  # Shader variant collections
+    ".spriteatlas",     # Sprite atlases
+    ".cubemap",         # Cubemap assets
+}
+
+# Physics
+UNITY_PHYSICS_EXTENSIONS = {
+    ".physicMaterial",      # 3D Physics materials
+    ".physicsMaterial2D",   # 2D Physics materials
+}
+
+# Terrain
+UNITY_TERRAIN_EXTENSIONS = {
+    ".terrainlayer",    # Terrain layer assets
+    ".brush",           # Terrain brush assets
+}
+
+# Audio
+UNITY_AUDIO_EXTENSIONS = {
+    ".mixer",           # Audio Mixer assets
+}
+
+# UI & Editor
+UNITY_UI_EXTENSIONS = {
+    ".guiskin",         # GUI Skin assets
+    ".fontsettings",    # Font settings
+    ".preset",          # Presets
+    ".giparams",        # Global Illumination parameters
+}
+
+# All Unity YAML extensions combined
+UNITY_EXTENSIONS = (
+    UNITY_CORE_EXTENSIONS
+    | UNITY_ANIMATION_EXTENSIONS
+    | UNITY_RENDERING_EXTENSIONS
+    | UNITY_PHYSICS_EXTENSIONS
+    | UNITY_TERRAIN_EXTENSIONS
+    | UNITY_AUDIO_EXTENSIONS
+    | UNITY_UI_EXTENSIONS
+)
 
 
 def get_repo_root(path: Path | None = None) -> Path | None:
