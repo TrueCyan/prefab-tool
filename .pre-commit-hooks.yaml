@@ -1,16 +1,25 @@
 # pre-commit hooks for prefab-tool
 # See https://pre-commit.com for more information
 
+# Regex pattern for all Unity YAML file extensions
+# Core: prefab, unity (scene), asset
+# Animation: anim, controller, overrideController, playable, mask, signal
+# Rendering: mat, renderTexture, flare, shadervariants, spriteatlas, cubemap
+# Physics: physicMaterial, physicsMaterial2D
+# Terrain: terrainlayer, brush
+# Audio: mixer
+# UI/Editor: guiskin, fontsettings, preset, giparams
+
 - id: prefab-normalize
-  name: Normalize Unity prefabs
+  name: Normalize Unity YAML files
   description: Normalize Unity YAML files for deterministic serialization
   entry: prefab-tool normalize --in-place
   language: python
-  files: \.(prefab|unity|asset)$
+  files: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams)$
   types: [file]
 
 - id: prefab-normalize-staged
-  name: Normalize Unity prefabs (staged only)
+  name: Normalize Unity YAML files (staged only)
   description: Normalize only staged Unity YAML files
   entry: prefab-tool normalize --changed-only --staged-only
   language: python
@@ -18,9 +27,9 @@
   always_run: true
 
 - id: prefab-validate
-  name: Validate Unity prefabs
+  name: Validate Unity YAML files
   description: Validate Unity YAML files for structural correctness
   entry: prefab-tool validate
   language: python
-  files: \.(prefab|unity|asset)$
+  files: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams)$
   types: [file]

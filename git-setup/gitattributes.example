@@ -1,14 +1,46 @@
 # Unity YAML files - use prefab-tool for diff and merge
+# See: https://docs.unity3d.com/Manual/UnityYAML.html
+
+# Core assets
 *.prefab diff=unity merge=unity text eol=lf
 *.unity diff=unity merge=unity text eol=lf
 *.asset diff=unity merge=unity text eol=lf
-*.mat diff=unity merge=unity text eol=lf
-*.controller diff=unity merge=unity text eol=lf
+
+# Animation & control
 *.anim diff=unity merge=unity text eol=lf
+*.controller diff=unity merge=unity text eol=lf
+*.overrideController diff=unity merge=unity text eol=lf
+*.playable diff=unity merge=unity text eol=lf
+*.mask diff=unity merge=unity text eol=lf
+*.signal diff=unity merge=unity text eol=lf
+
+# Materials & rendering
+*.mat diff=unity merge=unity text eol=lf
+*.renderTexture diff=unity merge=unity text eol=lf
+*.flare diff=unity merge=unity text eol=lf
+*.shadervariants diff=unity merge=unity text eol=lf
+*.spriteatlas diff=unity merge=unity text eol=lf
+*.cubemap diff=unity merge=unity text eol=lf
+
+# Physics
+*.physicMaterial diff=unity merge=unity text eol=lf
+*.physicsMaterial2D diff=unity merge=unity text eol=lf
+
+# Terrain
+*.terrainlayer diff=unity merge=unity text eol=lf
+*.brush diff=unity merge=unity text eol=lf
+
+# Audio
+*.mixer diff=unity merge=unity text eol=lf
+
+# UI & Editor
+*.guiskin diff=unity merge=unity text eol=lf
+*.fontsettings diff=unity merge=unity text eol=lf
+*.preset diff=unity merge=unity text eol=lf
+*.giparams diff=unity merge=unity text eol=lf
 
 # Unity meta files - treat as text
 *.meta text eol=lf
 
-# Other Unity binary files
-*.cubemap binary
+# Unity binary files (NOT YAML)
 *.unitypackage binary
