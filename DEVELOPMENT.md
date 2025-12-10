@@ -271,7 +271,99 @@ prefab-tool normalize *.prefab --parallel 4
 prefab-tool normalize *.prefab --parallel 4 --progress
 ```
 
-### Phase 8: Pre-commit Hook 통합 ✅
+### Phase 8: 바이너리 에셋 참조 추적 ✅
+
+**의존성 분석 (`asset_tracker.py`)**
+
+프리팹이 참조하는 외부 에셋(텍스처, 메시, 스크립트 등)을 추적:
+
+```bash
+# 모든 의존성 표시
+prefab-tool deps Player.prefab
+
+# 바이너리 에셋만 표시 (텍스처, 메시, 오디오)
+prefab-tool deps Player.prefab --binary-only
+
+# 미해결 (누락된) 의존성만 표시
+prefab-tool deps Player.prefab --unresolved-only
+
+# 타입별 필터링
+prefab-tool deps Player.prefab --type Texture
+
+# JSON 출력
+prefab-tool deps Player.prefab --format json
+
+# 여러 파일 분석
+prefab-tool deps *.prefab
+```
+
+**역참조 검색 (`find-refs`)**
+
+특정 에셋을 참조하는 파일 찾기:
+
+```bash
+# 텍스처를 참조하는 모든 파일 찾기
+prefab-tool find-refs Textures/player.png
+
+# 특정 디렉토리에서 검색
+prefab-tool find-refs Textures/player.png --search-path Assets/Prefabs
+
+# JSON 출력
+prefab-tool find-refs Textures/player.png --format json
+
+# 진행 상황 표시
+prefab-tool find-refs Textures/player.png --progress
+```
+
+**API 사용법**
+```python
+from prefab_tool import (
+    analyze_dependencies,
+    find_references_to_asset,
+    build_guid_index,
+    find_unity_project_root,
+    get_file_dependencies,
+    BINARY_ASSET_EXTENSIONS,
+)
+
+# 의존성 분석
+report = analyze_dependencies([Path("Player.prefab")])
+print(f"총 의존성: {report.total_dependencies}")
+print(f"해결됨: {report.resolved_count}")
+print(f"바이너리 에셋: {report.binary_count}")
+
+# 바이너리 에셋만 가져오기
+for dep in report.get_binary_dependencies():
+    print(f"  {dep.path} [{dep.asset_type}]")
+
+# 역참조 검색
+results = find_references_to_asset(
+    asset_path=Path("Textures/player.png"),
+    search_paths=[Path("Assets/Prefabs")],
+)
+for file_path, refs in results:
+    print(f"{file_path}: {len(refs)} 참조")
+
+# GUID 인덱스 빌드
+project_root = find_unity_project_root(Path("Assets/Prefabs/Player.prefab"))
+guid_index = build_guid_index(project_root)
+print(f"인덱싱된 에셋: {len(guid_index)}")
+```
+
+**지원되는 바이너리 에셋 타입**
+
+| 카테고리 | 확장자 |
+|---------|--------|
+| Texture | `.png`, `.jpg`, `.jpeg`, `.tga`, `.psd`, `.tiff`, `.exr`, `.hdr` |
+| Model | `.fbx`, `.obj`, `.dae`, `.3ds`, `.blend`, `.max`, `.ma`, `.mb` |
+| Audio | `.wav`, `.mp3`, `.ogg`, `.aiff`, `.flac`, `.m4a` |
+| Video | `.mp4`, `.mov`, `.avi`, `.webm` |
+| Font | `.ttf`, `.otf`, `.fon` |
+| Shader | `.shader`, `.cginc`, `.hlsl`, `.glsl`, `.compute` |
+| Plugin | `.dll`, `.so`, `.dylib` |
+| Data | `.bytes`, `.txt`, `.json`, `.xml`, `.csv` |
+
+### Phase 9: Pre-commit Hook 통합 ✅
 
 **pre-commit 프레임워크 지원 (`.pre-commit-hooks.yaml`)**
 
@@ -342,6 +434,18 @@ prefab-tool normalize *.prefab --parallel 4 --progress # 병렬 + 진행 상황
 prefab-tool stats Boss.unity
 prefab-tool stats *.prefab --format json
 
+# 의존성 분석
+prefab-tool deps Player.prefab                    # 모든 의존성
+prefab-tool deps Player.prefab --binary-only      # 바이너리 에셋만
+prefab-tool deps Player.prefab --unresolved-only  # 누락된 에셋만
+prefab-tool deps Player.prefab --type Texture     # 타입별 필터
+prefab-tool deps *.prefab --format json           # JSON 출력
+
+# 역참조 검색
+prefab-tool find-refs Textures/player.png                        # 참조 찾기
+prefab-tool find-refs Textures/player.png --search-path Assets/  # 경로 지정
+prefab-tool find-refs Textures/player.png --progress             # 진행 상황
+
 # 비교
 prefab-tool diff file1.prefab file2.prefab
 
@@ -396,6 +500,7 @@ prefab-tool/
 │   ├── formats.py       # JSON 내보내기
 │   ├── query.py         # 경로 기반 쿼리
 │   ├── git_utils.py     # Git 연동 유틸리티
+│   ├── asset_tracker.py # 바이너리 에셋 참조 추적
 │   └── cli.py           # CLI 인터페이스
 ├── tests/
 │   ├── fixtures/        # 테스트용 프리팹
@@ -410,14 +515,7 @@ prefab-tool/
 
 ### 중간 우선순위
 
-#### 1. 바이너리 에셋 참조 추적
-프리팹이 참조하는 바이너리 에셋(텍스처, 메시 등) 추적:
-```bash
-prefab-tool deps Player.prefab
-# 출력: Textures/player.png, Meshes/player.fbx, ...
-```
-
-#### 2. 프로젝트 전체 통계
+#### 1. 프로젝트 전체 통계
 ```bash
 prefab-tool stats --recursive Assets/
 # 출력:
@@ -429,12 +527,12 @@ prefab-tool stats --recursive Assets/
 
 ### 낮은 우선순위
 
-#### 3. GUI 도구
+#### 2. GUI 도구
 - VS Code 확장
 - Unity Editor 통합
 - 웹 기반 뷰어
 
-#### 4. 협업 기능
+#### 3. 협업 기능
 - 프리팹 잠금 (Lock)
 - 변경 알림
 - 리뷰 도구
