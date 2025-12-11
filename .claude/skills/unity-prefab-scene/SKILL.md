@@ -347,7 +347,7 @@ prefab-tool find-refs Textures/player.png
 | 1001 | PrefabInstance | 프리팹 인스턴스 |
 | 1660057539 | SceneRoots | ⚠️ **씬 루트 목록 (절대 직접 사용 금지!)** |
 
-**참고**: Light2D 등 패키지 컴포넌트는 별도의 classId를 가집니다. 원본 파일에서 classId를 확인하세요.
+**참고**: 패키지 컴포넌트(Light2D, TextMeshPro 등)는 `MonoBehaviour(114)`를 사용하며, 스크립트 GUID로 구분됩니다. 아래 "패키지 컴포넌트 GUID 참조" 섹션을 확인하세요.
 
 ---
 
@@ -373,6 +373,249 @@ Unity는 classId를 기반으로 오브젝트 타입을 결정합니다. 잘못�
 1. **MonoBehaviour(114)**: 모든 사용자 스크립트에 사용
 2. 알 수 없는 Unity 내장 컴포넌트는 원본 파일에서 classId를 복사
 3. 확실하지 않으면 Unity에서 직접 생성한 파일 참조
+
+---
+
+## 패키지 컴포넌트 GUID 참조
+
+Unity 패키지(URP, TextMeshPro, Cinemachine 등)의 컴포넌트들은 내장 클래스가 아니라 **MonoBehaviour(classId=114)** 로 구현됩니다. 이들은 스크립트의 GUID로 식별됩니다.
+
+### 알려진 패키지 컴포넌트 GUID
+
+| 패키지 | 컴포넌트 | GUID | fileID |
+|--------|----------|------|--------|
+| URP 2D | Light2D | `073797afb82c5a1438f328866b10b3f0` | 11500000 |
+| URP 2D | ShadowCaster2D | (프로젝트에서 추출 필요) | 11500000 |
+| TextMeshPro | TextMeshProUGUI | (프로젝트에서 추출 필요) | 11500000 |
+| Cinemachine | CinemachineVirtualCamera | (프로젝트에서 추출 필요) | 11500000 |
+
+> **참고**: 패키지 버전에 따라 GUID가 다를 수 있습니다. 사용 중인 프로젝트에서 직접 추출하는 것을 권장합니다.
+
+### GUID 발견 방법
+
+패키지 컴포넌트의 GUID를 찾는 방법:
+
+#### 방법 1: scan-scripts 명령어 사용 (권장, 자동화)
+
+`prefab-tool scan-scripts` 명령어로 프로젝트 전체의 스크립트 GUID를 자동으로 추출:
+
+```bash
+# 단일 파일 스캔
+prefab-tool scan-scripts Player.prefab
+
+# 디렉토리 재귀적 스캔
+prefab-tool scan-scripts Assets/Prefabs -r
+
+# GUID별로 그룹화하여 보기
+prefab-tool scan-scripts Assets/ -r --group-by-guid
+
+# 프로퍼티 키도 함께 보기 (컴포넌트 구조 파악용)
+prefab-tool scan-scripts Scene.unity --show-properties
+
+# JSON 출력 (자동화 스크립트용)
+prefab-tool scan-scripts *.prefab --format json --group-by-guid
+```
+
+출력 예시:
+```
+Scanned 15 file(s)
+Found 8 unique script GUID(s)
+
+============================================================
+GUID Summary Table (for SKILL.md):
+------------------------------------------------------------
+| GUID | fileID | Usage Count |
+|------|--------|-------------|
+| `f4688fdb7df04437aeb418b961361dc5` | 11500000 | 45 |
+| `fe87c0e1cc204ed48ad3b37840f39efc` | 11500000 | 24 |
+...
+```
+
+#### 방법 2: Python API로 추출
+
+```python
+from prefab_tool.parser import UnityYAMLDocument
+
+doc = UnityYAMLDocument.load("YourFile.prefab")
+for obj in doc.objects:
+    if obj.class_id == 114:  # MonoBehaviour
+        content = obj.get_content()
+        script = content.get("m_Script", {})
+        print(f"GUID: {script.get('guid')}")
+        print(f"Properties: {list(content.keys())}")
+```
+
+#### 방법 3: scan-meta로 패키지 폴더 스캔
+
+`prefab-tool scan-meta`로 패키지 폴더의 `.meta` 파일에서 직접 GUID 추출:
+
+```bash
+# URP 패키지의 모든 스크립트 GUID 추출
+prefab-tool scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --scripts-only
+
+# Light 관련 스크립트만 필터링
+prefab-tool scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --filter Light
+
+# TextMeshPro 패키지 스캔
+prefab-tool scan-meta "Library/PackageCache/com.unity.textmeshpro@*" -r --scripts-only
+
+# Cinemachine 패키지 스캔
+prefab-tool scan-meta "Library/PackageCache/com.unity.cinemachine@*" -r --scripts-only
+
+# JSON 출력 (자동화용)
+prefab-tool scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --scripts-only --format json
+```
+
+출력 예시:
+```
+Package: com.unity.render-pipelines.universal
+Scanned 150 .meta file(s)
+Found 45 asset(s) with GUIDs
+
+Scripts:
+----------------------------------------------------------------------
+Name                                     GUID
+----------------------------------------------------------------------
+Light2D                                  073797afb82c5a1438f328866b10b3f0
+ShadowCaster2D                           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+...
+
+======================================================================
+Markdown Table (for documentation):
+----------------------------------------------------------------------
+| Script | GUID |
+|--------|------|
+| Light2D | `073797afb82c5a1438f328866b10b3f0` |
+...
+```
+
+#### 방법 4: Unity Editor 스크립트 사용
+
+```csharp
+// Unity Editor에서 실행
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Rendering.Universal; // URP
+
+public static class GUIDFinder
+{
+    [MenuItem("Tools/Find Light2D GUID")]
+    public static void FindLight2DGUID()
+    {
+        var script = MonoScript.FromMonoBehaviour(
+            new GameObject().AddComponent<Light2D>()
+        );
+        string path = AssetDatabase.GetAssetPath(script);
+        string guid = AssetDatabase.AssetPathToGUID(path);
+        Debug.Log($"Light2D GUID: {guid}");
+    }
+}
+```
+
+### 패키지 컴포넌트 생성 예시
+
+#### Light2D (URP 2D) 생성
+
+```python
+from prefab_tool.parser import (
+    UnityYAMLDocument,
+    create_game_object,
+    create_transform,
+    create_mono_behaviour,
+)
+
+doc = UnityYAMLDocument.load("Scene.unity")
+
+# ID 생성
+go_id = doc.generate_unique_file_id()
+transform_id = doc.generate_unique_file_id()
+light2d_id = doc.generate_unique_file_id()
+
+# GameObject 생성
+go = create_game_object(
+    name="Global Light 2D",
+    file_id=go_id,
+    components=[transform_id, light2d_id],
+)
+
+# Transform 생성
+transform = create_transform(
+    game_object_id=go_id,
+    file_id=transform_id,
+)
+
+# Light2D 생성 (MonoBehaviour)
+light2d = create_mono_behaviour(
+    game_object_id=go_id,
+    script_guid="073797afb82c5a1438f328866b10b3f0",  # Light2D GUID
+    file_id=light2d_id,
+    enabled=True,
+    properties={
+        "m_LightType": 4,           # Global=4, Point=0, Sprite=2, Freeform=3
+        "m_Intensity": 1,
+        "m_Color": {"r": 1, "g": 1, "b": 1, "a": 1},
+        "m_UseNormalMap": 0,
+        "m_ShadowsEnabled": 0,
+        "m_ShadowIntensity": 0.75,
+        "m_ShadowVolumeIntensity": 0.75,
+        "m_ApplyToSortingLayers": [],  # 적용할 Sorting Layer 목록
+        "m_LightOrder": 0,
+        "m_OverlapOperation": 0,
+        "m_BlendStyleIndex": 0,
+        # Point Light 전용
+        "m_PointLightInnerAngle": 360,
+        "m_PointLightOuterAngle": 360,
+        "m_PointLightInnerRadius": 0,
+        "m_PointLightOuterRadius": 1,
+        "m_PointLightDistance": 0,
+        # Freeform/Sprite Light 전용
+        "m_ShapePath": [],
+        "m_ShapeLightFalloffSize": 0.5,
+        "m_ShapeLightParametricSides": 5,
+        "m_ShapeLightParametricAngleOffset": 0,
+        "m_ShapeLightParametricRadius": 1,
+    },
+)
+
+doc.add_object(go)
+doc.add_object(transform)
+doc.add_object(light2d)
+doc.save("Scene_with_light.unity")
+```
+
+### Light2D 타입 상수
+
+| 값 | 타입 | 설명 |
+|----|------|------|
+| 0 | Point | 점 조명 (원형) |
+| 2 | Sprite | 스프라이트 기반 조명 |
+| 3 | Freeform | 자유 형태 조명 |
+| 4 | Global | 전역 조명 (전체 씬) |
+
+### 패키지 컴포넌트 프로퍼티 분석
+
+새로운 패키지 컴포넌트를 사용하려면 먼저 해당 컴포넌트의 프로퍼티 구조를 분석해야 합니다:
+
+```python
+from prefab_tool.parser import UnityYAMLDocument
+from prefab_tool.formats import export_to_json
+import json
+
+# 해당 컴포넌트가 포함된 파일 분석
+doc = UnityYAMLDocument.load("FileWithComponent.prefab")
+prefab_json = export_to_json(doc)
+
+# MonoBehaviour 중 원하는 GUID 찾기
+for file_id, comp in prefab_json.components.items():
+    if comp.get("classId") == 114:
+        script_ref = comp.get("scriptRef", {})
+        guid = script_ref.get("guid", "")
+
+        if guid == "YOUR_TARGET_GUID":
+            print(f"=== Component: {file_id} ===")
+            print(f"GUID: {guid}")
+            print(f"Properties: {json.dumps(comp.get('properties', {}), indent=2)}")
+```
 
 ---
 
