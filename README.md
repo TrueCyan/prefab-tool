@@ -260,7 +260,3 @@ ruff check src/ tests/
 ## 라이선스
 
 MIT License
-
-## 기여
-
-이슈와 풀 리퀘스트를 환영합니다.
