@@ -885,6 +885,329 @@ def git_textconv(file: Path) -> None:
         sys.stdout.write(file.read_text(encoding="utf-8"))
 
 
+@main.command(name="difftool")
+@click.argument("old_file", type=click.Path(exists=True, path_type=Path))
+@click.argument("new_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--tool",
+    "-t",
+    "tool_name",
+    type=click.Choice(["vscode", "meld", "kdiff3", "opendiff", "vimdiff", "html"]),
+    default=None,
+    help="Diff tool to use (default: auto-detect or html)",
+)
+@click.option(
+    "--no-normalize",
+    is_flag=True,
+    help="Don't normalize files before comparing",
+)
+@click.option(
+    "--wait/--no-wait",
+    default=True,
+    help="Wait for diff tool to close (default: wait)",
+)
+def difftool(
+    old_file: Path,
+    new_file: Path,
+    tool_name: str | None,
+    no_normalize: bool,
+    wait: bool,
+) -> None:
+    """Open normalized Unity files in an external diff tool.
+
+    This command normalizes both files and opens them in a visual diff tool.
+    Designed to be used as a git difftool or from Git Fork.
+
+    Setup as git difftool:
+
+        git config diff.tool prefab-unity
+        git config difftool.prefab-unity.cmd 'prefab-tool difftool "$LOCAL" "$REMOTE"'
+
+    Or use 'prefab-tool setup --with-difftool' for automatic configuration.
+
+    Git Fork setup:
+
+        1. Open Git Fork → Settings → Integration
+        2. Set External Diff Tool to: Custom
+        3. Path: prefab-tool
+        4. Arguments: difftool "$LOCAL" "$REMOTE"
+
+    Examples:
+
+        # Compare with auto-detected tool
+        prefab-tool difftool old.prefab new.prefab
+
+        # Use VS Code
+        prefab-tool difftool old.prefab new.prefab --tool vscode
+
+        # Open HTML diff in browser
+        prefab-tool difftool old.prefab new.prefab --tool html
+
+        # Compare without normalization
+        prefab-tool difftool old.prefab new.prefab --no-normalize
+    """
+    import shutil
+    import subprocess
+    import tempfile
+    import webbrowser
+    from html import escape
+
+    normalizer = UnityPrefabNormalizer()
+
+    # Normalize files or read as-is
+    if no_normalize:
+        old_content = old_file.read_text(encoding="utf-8")
+        new_content = new_file.read_text(encoding="utf-8")
+    else:
+        try:
+            old_content = normalizer.normalize_file(old_file)
+        except Exception as e:
+            click.echo(f"Warning: Could not normalize {old_file}: {e}", err=True)
+            old_content = old_file.read_text(encoding="utf-8")
+
+        try:
+            new_content = normalizer.normalize_file(new_file)
+        except Exception as e:
+            click.echo(f"Warning: Could not normalize {new_file}: {e}", err=True)
+            new_content = new_file.read_text(encoding="utf-8")
+
+    # Auto-detect tool if not specified
+    if tool_name is None:
+        tool_name = _detect_diff_tool()
+
+    if tool_name == "html":
+        # Generate HTML diff and open in browser
+        html_content = _generate_html_diff(
+            old_content, new_content,
+            old_label=str(old_file),
+            new_label=str(new_file),
+        )
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".html",
+            delete=False,
+            encoding="utf-8",
+        ) as f:
+            f.write(html_content)
+            html_path = f.name
+
+        click.echo(f"Opening diff in browser: {html_path}")
+        webbrowser.open(f"file://{html_path}")
+        return
+
+    # Create temp files for external tool
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_tmp = Path(tmpdir) / f"old_{old_file.name}"
+        new_tmp = Path(tmpdir) / f"new_{new_file.name}"
+
+        old_tmp.write_text(old_content, encoding="utf-8")
+        new_tmp.write_text(new_content, encoding="utf-8")
+
+        # Build command for external tool
+        cmd = _build_difftool_cmd(tool_name, old_tmp, new_tmp, wait)
+
+        if cmd is None:
+            click.echo(f"Error: Diff tool '{tool_name}' not found", err=True)
+            click.echo("Available tools: vscode, meld, kdiff3, opendiff, vimdiff, html", err=True)
+            sys.exit(1)
+
+        try:
+            if wait:
+                subprocess.run(cmd, check=True)
+            else:
+                subprocess.Popen(cmd)
+        except FileNotFoundError:
+            click.echo(f"Error: Could not start {tool_name}", err=True)
+            click.echo("Make sure the tool is installed and in your PATH", err=True)
+            sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            # Some diff tools exit with non-zero when files differ
+            pass
+
+
+def _detect_diff_tool() -> str:
+    """Auto-detect available diff tool."""
+    import shutil
+
+    tools = [
+        ("code", "vscode"),
+        ("meld", "meld"),
+        ("kdiff3", "kdiff3"),
+        ("opendiff", "opendiff"),  # macOS FileMerge
+    ]
+
+    for cmd, name in tools:
+        if shutil.which(cmd):
+            return name
+
+    # Fallback to HTML if no tool found
+    return "html"
+
+
+def _build_difftool_cmd(
+    tool: str,
+    old_path: Path,
+    new_path: Path,
+    wait: bool,
+) -> list[str] | None:
+    """Build command line for diff tool."""
+    import shutil
+
+    if tool == "vscode":
+        code_cmd = shutil.which("code")
+        if not code_cmd:
+            return None
+        cmd = [code_cmd, "--diff", str(old_path), str(new_path)]
+        if wait:
+            cmd.append("--wait")
+        return cmd
+
+    elif tool == "meld":
+        meld_cmd = shutil.which("meld")
+        if not meld_cmd:
+            return None
+        return [meld_cmd, str(old_path), str(new_path)]
+
+    elif tool == "kdiff3":
+        kdiff3_cmd = shutil.which("kdiff3")
+        if not kdiff3_cmd:
+            return None
+        return [kdiff3_cmd, str(old_path), str(new_path)]
+
+    elif tool == "opendiff":
+        opendiff_cmd = shutil.which("opendiff")
+        if not opendiff_cmd:
+            return None
+        return [opendiff_cmd, str(old_path), str(new_path)]
+
+    elif tool == "vimdiff":
+        vimdiff_cmd = shutil.which("vimdiff")
+        if not vimdiff_cmd:
+            return None
+        return [vimdiff_cmd, str(old_path), str(new_path)]
+
+    return None
+
+
+def _generate_html_diff(
+    old_content: str,
+    new_content: str,
+    old_label: str,
+    new_label: str,
+) -> str:
+    """Generate HTML side-by-side diff."""
+    import difflib
+    from html import escape
+
+    old_lines = old_content.splitlines()
+    new_lines = new_content.splitlines()
+
+    differ = difflib.HtmlDiff(tabsize=2, wrapcolumn=80)
+    table = differ.make_table(
+        old_lines,
+        new_lines,
+        fromdesc=escape(old_label),
+        todesc=escape(new_label),
+        context=True,
+        numlines=5,
+    )
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Unity Prefab Diff</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }}
+        h1 {{
+            color: #569cd6;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }}
+        table.diff {{
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            border-collapse: collapse;
+            width: 100%;
+            background: #252526;
+        }}
+        .diff th {{
+            background: #333333;
+            color: #cccccc;
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #404040;
+        }}
+        .diff td {{
+            padding: 2px 8px;
+            vertical-align: top;
+            border-bottom: 1px solid #333333;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }}
+        .diff_header {{
+            background: #333333;
+            color: #888888;
+            font-weight: normal;
+        }}
+        .diff_next {{
+            background: #333333;
+        }}
+        .diff_add {{
+            background: #234023;
+            color: #89d185;
+        }}
+        .diff_chg {{
+            background: #3d3d00;
+            color: #dcdcaa;
+        }}
+        .diff_sub {{
+            background: #402020;
+            color: #f48771;
+        }}
+        td.diff_header {{
+            text-align: right;
+            width: 40px;
+            color: #6e7681;
+            user-select: none;
+        }}
+        .legend {{
+            margin-top: 20px;
+            padding: 10px;
+            background: #252526;
+            border-radius: 4px;
+        }}
+        .legend span {{
+            display: inline-block;
+            padding: 2px 8px;
+            margin-right: 10px;
+            border-radius: 2px;
+        }}
+        .legend .add {{ background: #234023; color: #89d185; }}
+        .legend .change {{ background: #3d3d00; color: #dcdcaa; }}
+        .legend .delete {{ background: #402020; color: #f48771; }}
+    </style>
+</head>
+<body>
+    <h1>Unity Prefab Diff (Normalized)</h1>
+    {table}
+    <div class="legend">
+        <span class="add">+ Added</span>
+        <span class="change">~ Changed</span>
+        <span class="delete">- Deleted</span>
+    </div>
+</body>
+</html>
+"""
+    return html
+
+
 @main.command(name="install-hooks")
 @click.option(
     "--pre-commit",
@@ -1495,6 +1818,17 @@ def find_refs(
     help="Also install pre-commit framework hooks",
 )
 @click.option(
+    "--with-difftool",
+    is_flag=True,
+    help="Also configure git difftool for Git Fork and other GUI clients",
+)
+@click.option(
+    "--difftool-backend",
+    type=click.Choice(["vscode", "meld", "kdiff3", "opendiff", "html", "auto"]),
+    default="auto",
+    help="Backend for difftool (default: auto-detect)",
+)
+@click.option(
     "--force",
     is_flag=True,
     help="Overwrite existing configuration",
@@ -1503,6 +1837,8 @@ def setup(
     use_global: bool,
     with_hooks: bool,
     with_pre_commit: bool,
+    with_difftool: bool,
+    difftool_backend: str,
     force: bool,
 ) -> None:
     """Set up Git integration with a single command.
@@ -1523,6 +1859,12 @@ def setup(
 
         # Setup with pre-commit framework
         prefab-tool setup --with-pre-commit
+
+        # Setup with difftool for Git Fork
+        prefab-tool setup --with-difftool
+
+        # Setup difftool with specific backend
+        prefab-tool setup --with-difftool --difftool-backend vscode
     """
     import subprocess
 
@@ -1555,6 +1897,33 @@ def setup(
     subprocess.run([*git_config_cmd, "merge.unity.name", "Unity YAML Merge (prefab-tool)"], check=True)
     subprocess.run([*git_config_cmd, "merge.unity.driver", "prefab-tool merge %O %A %B -o %A --path %P"], check=True)
     subprocess.run([*git_config_cmd, "merge.unity.recursive", "binary"], check=True)
+
+    # Configure difftool (for Git Fork and other GUI clients)
+    if with_difftool:
+        click.echo("  Configuring difftool...")
+
+        # Determine backend option
+        if difftool_backend == "auto":
+            backend_arg = ""
+        else:
+            backend_arg = f" --tool {difftool_backend}"
+
+        # Set up difftool
+        subprocess.run([*git_config_cmd, "diff.tool", "prefab-unity"], check=True)
+        subprocess.run(
+            [*git_config_cmd, "difftool.prefab-unity.cmd", f'prefab-tool difftool{backend_arg} "$LOCAL" "$REMOTE"'],
+            check=True,
+        )
+
+        # Also configure for Unity file types specifically
+        subprocess.run([*git_config_cmd, "difftool.prompt", "false"], check=True)
+
+        click.echo("  Difftool configured for Git Fork and GUI clients")
+        click.echo()
+        click.echo("  Git Fork setup:")
+        click.echo("    1. Open Git Fork → Repository → Settings → Git Config")
+        click.echo("    2. Or use: git difftool <file>")
+        click.echo()
 
     click.echo()
 
