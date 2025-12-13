@@ -190,9 +190,9 @@ def main() -> None:
     help="Modify files in place (same as not specifying -o)",
 )
 @click.option(
-    "--reorder-fields",
+    "--no-reorder-fields",
     is_flag=True,
-    help="Reorder MonoBehaviour fields according to C# script declaration order",
+    help="Disable reordering MonoBehaviour fields according to C# script declaration order",
 )
 @click.option(
     "--project-root",
@@ -218,7 +218,7 @@ def normalize(
     progress: bool,
     parallel_jobs: int,
     in_place: bool,
-    reorder_fields: bool,
+    no_reorder_fields: bool,
     project_root: Path | None,
 ) -> None:
     """Normalize Unity YAML files for deterministic serialization.
@@ -259,13 +259,13 @@ def normalize(
         # Dry run to see what would be normalized
         prefab-tool normalize --changed-only --dry-run
 
-    Script-based field ordering:
+    Script-based field ordering (enabled by default):
 
-        # Reorder MonoBehaviour fields according to C# script declaration order
-        prefab-tool normalize Player.prefab --reorder-fields
+        # Disable field reordering
+        prefab-tool normalize Player.prefab --no-reorder-fields
 
-        # With explicit project root
-        prefab-tool normalize Player.prefab --reorder-fields --project-root /path/to/unity/project
+        # With explicit project root for script resolution
+        prefab-tool normalize Player.prefab --project-root /path/to/unity/project
     """
     # Collect files to normalize
     files_to_normalize: list[Path] = []
@@ -348,7 +348,7 @@ def normalize(
         "use_hex_floats": hex_floats,
         "normalize_quaternions": not no_normalize_quaternions,
         "float_precision": precision,
-        "reorder_script_fields": reorder_fields,
+        "reorder_script_fields": not no_reorder_fields,
         "project_root": project_root,
     }
 
