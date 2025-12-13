@@ -37,12 +37,20 @@ from prefab_tool.asset_tracker import (
     find_unity_project_root,
     get_file_dependencies,
 )
+from prefab_tool.query import (
+    QueryResult,
+    query_path,
+    set_value,
+    get_value,
+    merge_values,
+)
 
 __all__ = [
     # Classes
     "UnityPrefabNormalizer",
     "UnityYAMLDocument",
     "UnityYAMLObject",
+    "QueryResult",
     # Asset tracking classes
     "AssetDependency",
     "AssetReference",
@@ -53,6 +61,11 @@ __all__ = [
     "get_files_changed_since",
     "get_repo_root",
     "is_git_repository",
+    # Query functions
+    "query_path",
+    "set_value",
+    "get_value",
+    "merge_values",
     # Asset tracking functions
     "analyze_dependencies",
     "build_guid_index",

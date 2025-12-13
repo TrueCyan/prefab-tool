@@ -797,11 +797,25 @@ def import_json(
     type=click.Path(path_type=Path),
     help="Output file (default: modify in place)",
 )
+@click.option(
+    "--create",
+    "-c",
+    is_flag=True,
+    help="Create the path if it doesn't exist (upsert behavior)",
+)
+@click.option(
+    "--after",
+    type=str,
+    default=None,
+    help="Insert new field after this key (only with --create)",
+)
 def set_value_cmd(
     file: Path,
     set_path: str,
     value: str,
     output: Path | None,
+    create: bool,
+    after: str | None,
 ) -> None:
     """Set a value at a specific path in a Unity YAML file.
 
@@ -824,6 +838,18 @@ def set_value_cmd(
             --path "components/12345/localScale" \\
             --value '{"x": 2, "y": 2, "z": 2}' \\
             -o Player_modified.prefab
+
+        # Create a new field if it doesn't exist
+        prefab-tool set Scene.unity \\
+            --path "components/495733805/portalAPrefab" \\
+            --value '{"fileID": 123, "guid": "abc", "type": 3}' \\
+            --create
+
+        # Create a new field after a specific key
+        prefab-tool set Portal.prefab \\
+            --path "components/123/portalType" \\
+            --value "0" \\
+            --create --after "linkedPortal"
     """
     from prefab_tool.parser import UnityYAMLDocument
     from prefab_tool.query import set_value
@@ -843,15 +869,109 @@ def set_value_cmd(
         parsed_value = value
 
     # Set the value
-    if set_value(doc, set_path, parsed_value):
+    if set_value(doc, set_path, parsed_value, create=create, after=after):
         output_path = output or file
         doc.save(output_path)
-        click.echo(f"Set {set_path} = {value}")
+        if create:
+            click.echo(f"Set (upsert) {set_path} = {value}")
+        else:
+            click.echo(f"Set {set_path} = {value}")
         if output:
             click.echo(f"Saved to: {output}")
     else:
         click.echo(f"Error: Path not found: {set_path}", err=True)
         sys.exit(1)
+
+
+@main.command(name="merge-fields")
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--path",
+    "-p",
+    "merge_path",
+    required=True,
+    help="Path to the target dict (e.g., 'components/12345')",
+)
+@click.option(
+    "--values",
+    "-v",
+    required=True,
+    help="JSON object with key-value pairs to merge",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (default: modify in place)",
+)
+@click.option(
+    "--no-create",
+    is_flag=True,
+    help="Only update existing fields, don't create new ones",
+)
+def merge_fields_cmd(
+    file: Path,
+    merge_path: str,
+    values: str,
+    output: Path | None,
+    no_create: bool,
+) -> None:
+    """Merge multiple fields into a target path in a Unity YAML file.
+
+    This enables batch insertion of multiple fields at once.
+
+    Examples:
+
+        # Merge multiple reference fields
+        prefab-tool merge-fields Scene.unity \\
+            --path "components/495733805" \\
+            --values '{
+                "portalAPrefab": {"fileID": 123, "guid": "abc", "type": 3},
+                "portalBPrefab": {"fileID": 456, "guid": "def", "type": 3},
+                "rotationStep": 15
+            }'
+
+        # Update only existing fields
+        prefab-tool merge-fields Player.prefab \\
+            --path "components/400000" \\
+            --values '{"m_LocalPosition": {"x": 1, "y": 2, "z": 3}}' \\
+            --no-create
+    """
+    from prefab_tool.parser import UnityYAMLDocument
+    from prefab_tool.query import merge_values
+    import json
+
+    try:
+        doc = UnityYAMLDocument.load(file)
+    except Exception as e:
+        click.echo(f"Error: Failed to load {file}: {e}", err=True)
+        sys.exit(1)
+
+    # Parse the values
+    try:
+        parsed_values = json.loads(values)
+    except json.JSONDecodeError as e:
+        click.echo(f"Error: Invalid JSON values: {e}", err=True)
+        sys.exit(1)
+
+    if not isinstance(parsed_values, dict):
+        click.echo("Error: Values must be a JSON object", err=True)
+        sys.exit(1)
+
+    # Merge the values
+    updated, created = merge_values(doc, merge_path, parsed_values, create=not no_create)
+
+    if updated == 0 and created == 0:
+        click.echo(f"Error: Path not found or no fields merged: {merge_path}", err=True)
+        sys.exit(1)
+
+    output_path = output or file
+    doc.save(output_path)
+
+    click.echo(f"Merged {updated + created} fields at {merge_path}")
+    click.echo(f"  Updated: {updated}, Created: {created}")
+    if output:
+        click.echo(f"Saved to: {output}")
 
 
 @main.command(name="git-textconv")
