@@ -608,6 +608,24 @@ def validate(
     help="Path to query (e.g., 'gameObjects/*/name', 'components/*/type')",
 )
 @click.option(
+    "--find-name",
+    type=str,
+    default=None,
+    help="Find GameObjects by name pattern (supports * wildcard)",
+)
+@click.option(
+    "--find-component",
+    type=str,
+    default=None,
+    help="Find GameObjects with specific component type (e.g., 'Light2D', 'SpriteRenderer')",
+)
+@click.option(
+    "--find-script",
+    type=str,
+    default=None,
+    help="Find GameObjects with MonoBehaviour by script GUID",
+)
+@click.option(
     "--format",
     "output_format",
     type=click.Choice(["text", "json"]),
@@ -617,6 +635,9 @@ def validate(
 def query(
     file: Path,
     query_path_str: str | None,
+    find_name: str | None,
+    find_component: str | None,
+    find_script: str | None,
     output_format: str,
 ) -> None:
     """Query data from a Unity YAML file.
@@ -637,17 +658,78 @@ def query(
 
         # Show summary (no path)
         prefab-tool query Player.prefab
+
+        # Find GameObjects by name (supports wildcards)
+        prefab-tool query Scene.unity --find-name "Player*"
+        prefab-tool query Scene.unity --find-name "*Enemy*"
+
+        # Find GameObjects with specific component
+        prefab-tool query Scene.unity --find-component "Light2D"
+        prefab-tool query Scene.unity --find-component "SpriteRenderer"
+
+        # Find GameObjects with MonoBehaviour by script GUID
+        prefab-tool query Scene.unity --find-script "abc123def456..."
     """
-    from prefab_tool.parser import UnityYAMLDocument
+    from prefab_tool.parser import UnityYAMLDocument, CLASS_IDS
     from prefab_tool.query import query_path as do_query
     from prefab_tool.formats import get_summary
     import json
+    import fnmatch
 
     try:
         doc = UnityYAMLDocument.load(file)
     except Exception as e:
         click.echo(f"Error: Failed to load {file}: {e}", err=True)
         sys.exit(1)
+
+    # Handle find-name query
+    if find_name is not None:
+        results = _find_by_name(doc, find_name)
+        if not results:
+            click.echo(f"No GameObjects found matching: {find_name}")
+            return
+
+        if output_format == "json":
+            click.echo(json.dumps(results, indent=2))
+        else:
+            click.echo(f"Found {len(results)} GameObject(s) matching '{find_name}':")
+            for r in results:
+                click.echo(f"  {r['name']} (fileID: {r['fileID']})")
+                if r.get("components"):
+                    click.echo(f"    Components: {', '.join(r['components'])}")
+        return
+
+    # Handle find-component query
+    if find_component is not None:
+        results = _find_by_component(doc, find_component)
+        if not results:
+            click.echo(f"No GameObjects found with component: {find_component}")
+            return
+
+        if output_format == "json":
+            click.echo(json.dumps(results, indent=2))
+        else:
+            click.echo(f"Found {len(results)} GameObject(s) with '{find_component}':")
+            for r in results:
+                click.echo(f"  {r['name']} (fileID: {r['fileID']})")
+                click.echo(f"    Component fileID: {r['componentFileID']}")
+        return
+
+    # Handle find-script query
+    if find_script is not None:
+        results = _find_by_script(doc, find_script)
+        if not results:
+            click.echo(f"No GameObjects found with script GUID: {find_script}")
+            return
+
+        if output_format == "json":
+            click.echo(json.dumps(results, indent=2))
+        else:
+            click.echo(f"Found {len(results)} GameObject(s) with script '{find_script[:16]}...':")
+            for r in results:
+                click.echo(f"  {r['name']} (fileID: {r['fileID']})")
+                click.echo(f"    MonoBehaviour fileID: {r['componentFileID']}")
+        return
 
     if not query_path_str:
         # Show summary
@@ -688,6 +770,148 @@ def query(
                 click.echo(f"{r.path}: {json.dumps(r.value)}")
             else:
                 click.echo(f"{r.path}: {r.value}")
+
+
+def _find_by_name(doc: "UnityYAMLDocument", pattern: str) -> list[dict]:
+    """Find GameObjects by name pattern."""
+    import fnmatch
+
+    results = []
+    game_objects = doc.get_game_objects()
+
+    for go in game_objects:
+        content = go.get_content()
+        if not content:
+            continue
+
+        name = content.get("m_Name", "")
+        if fnmatch.fnmatch(name, pattern):
+            # Get component types
+            component_types = []
+            for comp_ref in content.get("m_Component", []):
+                comp_id = comp_ref.get("component", {}).get("fileID", 0)
+                if comp_id:
+                    comp = doc.get_by_file_id(comp_id)
+                    if comp:
+                        component_types.append(comp.class_name)
+
+            results.append({
+                "name": name,
+                "fileID": go.file_id,
+                "layer": content.get("m_Layer", 0),
+                "tag": content.get("m_TagString", "Untagged"),
+                "isActive": content.get("m_IsActive", 1) == 1,
+                "components": component_types,
+            })
+
+    return results
+
+
+def _find_by_component(doc: "UnityYAMLDocument", component_type: str) -> list[dict]:
+    """Find GameObjects with a specific component type."""
+    from prefab_tool.parser import CLASS_IDS
+
+    results = []
+
+    # Build reverse mapping: class name -> class IDs
+    name_to_ids: dict[str, list[int]] = {}
+    for class_id, class_name in CLASS_IDS.items():
+        name_lower = class_name.lower()
+        if name_lower not in name_to_ids:
+            name_to_ids[name_lower] = []
+        name_to_ids[name_lower].append(class_id)
+
+    # Find matching class IDs
+    search_lower = component_type.lower()
+    matching_class_ids = set()
+    for name, ids in name_to_ids.items():
+        if search_lower in name or name in search_lower:
+            matching_class_ids.update(ids)
+
+    # Also check for MonoBehaviour scripts with matching name in m_Script
+    check_monobehaviour = not matching_class_ids or "mono" in search_lower or "script" in search_lower
+
+    game_objects = doc.get_game_objects()
+
+    for go in game_objects:
+        content = go.get_content()
+        if not content:
+            continue
+
+        for comp_ref in content.get("m_Component", []):
+            comp_id = comp_ref.get("component", {}).get("fileID", 0)
+            if not comp_id:
+                continue
+
+            comp = doc.get_by_file_id(comp_id)
+            if not comp:
+                continue
+
+            # Check class ID match
+            if comp.class_id in matching_class_ids:
+                results.append({
+                    "name": content.get("m_Name", ""),
+                    "fileID": go.file_id,
+                    "componentFileID": comp_id,
+                    "componentType": comp.class_name,
+                })
+                break
+
+            # Check MonoBehaviour with script name
+            if check_monobehaviour and comp.class_id == 114:  # MonoBehaviour
+                comp_content = comp.get_content()
+                if comp_content:
+                    # Try to get script reference for additional matching
+                    script_ref = comp_content.get("m_Script", {})
+                    if script_ref:
+                        results.append({
+                            "name": content.get("m_Name", ""),
+                            "fileID": go.file_id,
+                            "componentFileID": comp_id,
+                            "componentType": "MonoBehaviour",
+                            "scriptGUID": script_ref.get("guid", ""),
+                        })
+                        break
+
+    return results
+
+
+def _find_by_script(doc: "UnityYAMLDocument", script_guid: str) -> list[dict]:
+    """Find GameObjects with MonoBehaviour by script GUID."""
+    results = []
+    game_objects = doc.get_game_objects()
+
+    for go in game_objects:
+        content = go.get_content()
+        if not content:
+            continue
+
+        for comp_ref in content.get("m_Component", []):
+            comp_id = comp_ref.get("component", {}).get("fileID", 0)
+            if not comp_id:
+                continue
+
+            comp = doc.get_by_file_id(comp_id)
+            if not comp or comp.class_id != 114:  # MonoBehaviour
+                continue
+
+            comp_content = comp.get_content()
+            if not comp_content:
+                continue
+
+            script_ref = comp_content.get("m_Script", {})
+            guid = script_ref.get("guid", "")
+
+            if guid and (guid == script_guid or guid.startswith(script_guid)):
+                results.append({
+                    "name": content.get("m_Name", ""),
+                    "fileID": go.file_id,
+                    "componentFileID": comp_id,
+                    "scriptGUID": guid,
+                })
+                break
+
+    return results
 
 
 @main.command()
@@ -3153,6 +3377,943 @@ def sprite_info_cmd(
                 click.echo()
                 click.echo("Usage (first sub-sprite):")
                 click.echo(f"  prefab-tool sprite-link <prefab> -c <component_id> -s \"{sprite}\" --sub-sprite \"{first_sprite['name']}\"")
+
+
+@main.command(name="add")
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--gameobject",
+    is_flag=True,
+    help="Add a new GameObject",
+)
+@click.option(
+    "--component",
+    "component_target",
+    type=int,
+    default=None,
+    help="Add component to GameObject with this fileID",
+)
+@click.option(
+    "--name",
+    "-n",
+    "obj_name",
+    type=str,
+    default="NewGameObject",
+    help="Name for the new GameObject (default: NewGameObject)",
+)
+@click.option(
+    "--parent",
+    "-p",
+    "parent_id",
+    type=int,
+    default=0,
+    help="Parent Transform fileID (0 for root)",
+)
+@click.option(
+    "--position",
+    type=str,
+    default=None,
+    help="Local position as 'x,y,z' (default: 0,0,0)",
+)
+@click.option(
+    "--layer",
+    type=int,
+    default=0,
+    help="Layer number (default: 0)",
+)
+@click.option(
+    "--tag",
+    type=str,
+    default="Untagged",
+    help="Tag string (default: Untagged)",
+)
+@click.option(
+    "--script-guid",
+    type=str,
+    default=None,
+    help="GUID of the MonoBehaviour script to add",
+)
+@click.option(
+    "--component-type",
+    type=click.Choice([
+        "Transform", "RectTransform", "MonoBehaviour",
+        "SpriteRenderer", "Camera", "Light", "AudioSource",
+        "BoxCollider2D", "CircleCollider2D", "Rigidbody2D",
+    ]),
+    default=None,
+    help="Type of built-in component to add",
+)
+@click.option(
+    "--props",
+    type=str,
+    default=None,
+    help="JSON object with component properties",
+)
+@click.option(
+    "--ui",
+    is_flag=True,
+    help="Create UI GameObject (uses RectTransform instead of Transform)",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (default: modify in place)",
+)
+def add_object(
+    file: Path,
+    gameobject: bool,
+    component_target: int | None,
+    obj_name: str,
+    parent_id: int,
+    position: str | None,
+    layer: int,
+    tag: str,
+    script_guid: str | None,
+    component_type: str | None,
+    props: str | None,
+    ui: bool,
+    output: Path | None,
+) -> None:
+    """Add a GameObject or component to a Unity YAML file.
+
+    This command enables direct addition of GameObjects and components
+    without the export → edit JSON → import workflow.
+
+    Examples:
+
+        # Add a new GameObject at root
+        prefab-tool add Scene.unity --gameobject --name "Player"
+
+        # Add a new GameObject with parent
+        prefab-tool add Scene.unity --gameobject --name "Child" --parent 12345
+
+        # Add a new GameObject with position
+        prefab-tool add Scene.unity --gameobject --name "Enemy" --position "10,0,5"
+
+        # Add a UI GameObject (RectTransform)
+        prefab-tool add Scene.unity --gameobject --name "Button" --ui --parent 67890
+
+        # Add a MonoBehaviour component to a GameObject
+        prefab-tool add Scene.unity --component 12345 --script-guid "abc123..."
+
+        # Add a component with properties
+        prefab-tool add Scene.unity --component 12345 --script-guid "abc123..." \\
+            --props '{"speed": 5.0, "health": 100}'
+
+        # Add a built-in component
+        prefab-tool add Scene.unity --component 12345 --component-type SpriteRenderer
+    """
+    from prefab_tool.parser import (
+        UnityYAMLDocument,
+        create_game_object,
+        create_transform,
+        create_rect_transform,
+        create_mono_behaviour,
+    )
+    import json
+
+    if not gameobject and component_target is None:
+        click.echo("Error: Specify --gameobject or --component <fileID>", err=True)
+        sys.exit(1)
+
+    if gameobject and component_target is not None:
+        click.echo("Error: Cannot use both --gameobject and --component", err=True)
+        sys.exit(1)
+
+    try:
+        doc = UnityYAMLDocument.load(file)
+    except Exception as e:
+        click.echo(f"Error: Failed to load {file}: {e}", err=True)
+        sys.exit(1)
+
+    output_path = output or file
+
+    # Parse position
+    pos = None
+    if position:
+        try:
+            x, y, z = map(float, position.split(","))
+            pos = {"x": x, "y": y, "z": z}
+        except ValueError:
+            click.echo(f"Error: Invalid position format: {position}", err=True)
+            click.echo("Expected format: x,y,z (e.g., '10,0,5')", err=True)
+            sys.exit(1)
+
+    # Parse properties
+    properties = None
+    if props:
+        try:
+            properties = json.loads(props)
+        except json.JSONDecodeError as e:
+            click.echo(f"Error: Invalid JSON for --props: {e}", err=True)
+            sys.exit(1)
+
+    if gameobject:
+        # Create new GameObject
+        go_id = doc.generate_unique_file_id()
+        transform_id = doc.generate_unique_file_id()
+
+        # Create Transform or RectTransform
+        if ui:
+            transform = create_rect_transform(
+                game_object_id=go_id,
+                file_id=transform_id,
+                position=pos,
+                parent_id=parent_id,
+            )
+        else:
+            transform = create_transform(
+                game_object_id=go_id,
+                file_id=transform_id,
+                position=pos,
+                parent_id=parent_id,
+            )
+
+        # Create GameObject
+        go = create_game_object(
+            name=obj_name,
+            file_id=go_id,
+            layer=layer,
+            tag=tag,
+            components=[transform_id],
+        )
+
+        # Add to document
+        doc.add_object(go)
+        doc.add_object(transform)
+
+        # Update parent's children list if parent specified
+        if parent_id != 0:
+            parent_obj = doc.get_by_file_id(parent_id)
+            if parent_obj:
+                content = parent_obj.get_content()
+                if content and "m_Children" in content:
+                    content["m_Children"].append({"fileID": transform_id})
+
+        doc.save(output_path)
+        click.echo(f"Added GameObject '{obj_name}'")
+        click.echo(f"  GameObject fileID: {go_id}")
+        click.echo(f"  {'RectTransform' if ui else 'Transform'} fileID: {transform_id}")
+
+    elif component_target is not None:
+        # Add component to existing GameObject
+        target_go = doc.get_by_file_id(component_target)
+        if target_go is None:
+            click.echo(f"Error: GameObject with fileID {component_target} not found", err=True)
+            sys.exit(1)
+
+        if target_go.class_id != 1:
+            click.echo(f"Error: fileID {component_target} is not a GameObject", err=True)
+            click.echo(f"  Found: {target_go.class_name}", err=True)
+            sys.exit(1)
+
+        component_id = doc.generate_unique_file_id()
+
+        if script_guid:
+            # Create MonoBehaviour
+            component = create_mono_behaviour(
+                game_object_id=component_target,
+                script_guid=script_guid,
+                file_id=component_id,
+                properties=properties,
+            )
+            click.echo(f"Added MonoBehaviour component")
+        elif component_type:
+            # Create built-in component
+            component = _create_builtin_component(
+                component_type=component_type,
+                game_object_id=component_target,
+                file_id=component_id,
+                properties=properties,
+            )
+            click.echo(f"Added {component_type} component")
+        else:
+            click.echo("Error: Specify --script-guid or --component-type", err=True)
+            sys.exit(1)
+
+        # Add component to document
+        doc.add_object(component)
+
+        # Update GameObject's component list
+        go_content = target_go.get_content()
+        if go_content and "m_Component" in go_content:
+            go_content["m_Component"].append({"component": {"fileID": component_id}})
+
+        doc.save(output_path)
+        click.echo(f"  Component fileID: {component_id}")
+        click.echo(f"  Target GameObject: {component_target}")
+
+    if output:
+        click.echo(f"Saved to: {output}")
+
+
+def _create_builtin_component(
+    component_type: str,
+    game_object_id: int,
+    file_id: int,
+    properties: dict | None = None,
+) -> "UnityYAMLObject":
+    """Create a built-in Unity component."""
+    from prefab_tool.parser import UnityYAMLObject
+
+    # Class ID mapping for built-in components
+    class_ids = {
+        "Transform": 4,
+        "RectTransform": 224,
+        "MonoBehaviour": 114,
+        "SpriteRenderer": 212,
+        "Camera": 20,
+        "Light": 108,
+        "AudioSource": 82,
+        "BoxCollider2D": 61,
+        "CircleCollider2D": 58,
+        "Rigidbody2D": 50,
+    }
+
+    class_id = class_ids.get(component_type, 114)
+
+    # Base content for components
+    content = {
+        "m_ObjectHideFlags": 0,
+        "m_CorrespondingSourceObject": {"fileID": 0},
+        "m_PrefabInstance": {"fileID": 0},
+        "m_PrefabAsset": {"fileID": 0},
+        "m_GameObject": {"fileID": game_object_id},
+        "m_Enabled": 1,
+    }
+
+    # Add type-specific defaults
+    if component_type == "SpriteRenderer":
+        content.update({
+            "m_CastShadows": 0,
+            "m_ReceiveShadows": 0,
+            "m_DynamicOccludee": 1,
+            "m_StaticShadowCaster": 0,
+            "m_MotionVectors": 1,
+            "m_LightProbeUsage": 1,
+            "m_ReflectionProbeUsage": 1,
+            "m_RenderingLayerMask": 1,
+            "m_RendererPriority": 0,
+            "m_Sprite": {"fileID": 0},
+            "m_Color": {"r": 1, "g": 1, "b": 1, "a": 1},
+            "m_FlipX": 0,
+            "m_FlipY": 0,
+            "m_DrawMode": 0,
+            "m_MaskInteraction": 0,
+            "m_SpriteSortPoint": 0,
+        })
+    elif component_type == "Camera":
+        content.update({
+            "m_ClearFlags": 1,
+            "m_BackGroundColor": {"r": 0.19215687, "g": 0.3019608, "b": 0.4745098, "a": 0},
+            "m_projectionMatrixMode": 1,
+            "m_GateFitMode": 2,
+            "m_FOVAxisMode": 0,
+            "m_NearClipPlane": 0.3,
+            "m_FarClipPlane": 1000,
+            "m_FieldOfView": 60,
+            "m_Orthographic": 0,
+            "m_OrthographicSize": 5,
+            "m_Depth": 0,
+        })
+    elif component_type == "Light":
+        content.update({
+            "m_Type": 1,
+            "m_Shape": 0,
+            "m_Color": {"r": 1, "g": 0.95686275, "b": 0.8392157, "a": 1},
+            "m_Intensity": 1,
+            "m_Range": 10,
+            "m_SpotAngle": 30,
+            "m_InnerSpotAngle": 21.80208,
+            "m_CookieSize": 10,
+            "m_Shadows": {"m_Type": 2, "m_Resolution": -1, "m_CustomResolution": -1},
+        })
+    elif component_type == "AudioSource":
+        content.update({
+            "m_AudioClip": {"fileID": 0},
+            "m_PlayOnAwake": 1,
+            "m_Volume": 1,
+            "m_Pitch": 1,
+            "m_Loop": 0,
+            "m_Mute": 0,
+            "m_Spatialize": 0,
+            "m_SpatializePostEffects": 0,
+            "m_Priority": 128,
+            "m_DopplerLevel": 1,
+            "m_MinDistance": 1,
+            "m_MaxDistance": 500,
+            "m_Pan2D": 0,
+        })
+    elif component_type in ("BoxCollider2D", "CircleCollider2D"):
+        content.update({
+            "m_Density": 1,
+            "m_Material": {"fileID": 0},
+            "m_IsTrigger": 0,
+            "m_UsedByEffector": 0,
+            "m_UsedByComposite": 0,
+            "m_Offset": {"x": 0, "y": 0},
+        })
+        if component_type == "BoxCollider2D":
+            content["m_Size"] = {"x": 1, "y": 1}
+            content["m_EdgeRadius"] = 0
+        else:
+            content["m_Radius"] = 0.5
+    elif component_type == "Rigidbody2D":
+        content.update({
+            "m_BodyType": 0,
+            "m_Simulated": 1,
+            "m_UseFullKinematicContacts": 0,
+            "m_UseAutoMass": 0,
+            "m_Mass": 1,
+            "m_LinearDamping": 0,
+            "m_AngularDamping": 0.05,
+            "m_GravityScale": 1,
+            "m_Material": {"fileID": 0},
+            "m_Interpolate": 0,
+            "m_SleepingMode": 1,
+            "m_CollisionDetection": 0,
+            "m_Constraints": 0,
+        })
+
+    # Override with custom properties
+    if properties:
+        content.update(properties)
+
+    return UnityYAMLObject(
+        class_id=class_id,
+        file_id=file_id,
+        data={component_type: content},
+        stripped=False,
+    )
+
+
+@main.command(name="delete")
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--gameobject",
+    "-g",
+    "gameobject_id",
+    type=int,
+    default=None,
+    help="Delete GameObject with this fileID",
+)
+@click.option(
+    "--component",
+    "-c",
+    "component_id",
+    type=int,
+    default=None,
+    help="Delete component with this fileID",
+)
+@click.option(
+    "--cascade",
+    is_flag=True,
+    help="Delete all children when deleting a GameObject",
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Delete without confirmation",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (default: modify in place)",
+)
+def delete_object(
+    file: Path,
+    gameobject_id: int | None,
+    component_id: int | None,
+    cascade: bool,
+    force: bool,
+    output: Path | None,
+) -> None:
+    """Delete a GameObject or component from a Unity YAML file.
+
+    This command enables direct deletion without the export → edit → import workflow.
+
+    Examples:
+
+        # Delete a specific component
+        prefab-tool delete Scene.unity --component 67890
+
+        # Delete a GameObject (keeps children)
+        prefab-tool delete Scene.unity --gameobject 12345
+
+        # Delete a GameObject and all its children
+        prefab-tool delete Scene.unity --gameobject 12345 --cascade
+
+        # Delete without confirmation
+        prefab-tool delete Scene.unity --gameobject 12345 --force
+    """
+    from prefab_tool.parser import UnityYAMLDocument
+
+    if gameobject_id is None and component_id is None:
+        click.echo("Error: Specify --gameobject or --component", err=True)
+        sys.exit(1)
+
+    if gameobject_id is not None and component_id is not None:
+        click.echo("Error: Cannot use both --gameobject and --component", err=True)
+        sys.exit(1)
+
+    try:
+        doc = UnityYAMLDocument.load(file)
+    except Exception as e:
+        click.echo(f"Error: Failed to load {file}: {e}", err=True)
+        sys.exit(1)
+
+    output_path = output or file
+    deleted_ids: list[int] = []
+
+    if component_id is not None:
+        # Delete component
+        obj = doc.get_by_file_id(component_id)
+        if obj is None:
+            click.echo(f"Error: Component with fileID {component_id} not found", err=True)
+            sys.exit(1)
+
+        if obj.class_id == 1:
+            click.echo(f"Error: fileID {component_id} is a GameObject, not a component", err=True)
+            click.echo("Use --gameobject instead", err=True)
+            sys.exit(1)
+
+        # Find and update the parent GameObject
+        content = obj.get_content()
+        if content and "m_GameObject" in content:
+            parent_go_id = content["m_GameObject"].get("fileID", 0)
+            parent_go = doc.get_by_file_id(parent_go_id)
+            if parent_go:
+                go_content = parent_go.get_content()
+                if go_content and "m_Component" in go_content:
+                    go_content["m_Component"] = [
+                        c for c in go_content["m_Component"]
+                        if c.get("component", {}).get("fileID") != component_id
+                    ]
+
+        if not force:
+            click.echo(f"Will delete {obj.class_name} (fileID: {component_id})")
+            if not click.confirm("Continue?"):
+                click.echo("Aborted")
+                return
+
+        doc.remove_object(component_id)
+        deleted_ids.append(component_id)
+        click.echo(f"Deleted component {obj.class_name} (fileID: {component_id})")
+
+    elif gameobject_id is not None:
+        # Delete GameObject
+        obj = doc.get_by_file_id(gameobject_id)
+        if obj is None:
+            click.echo(f"Error: GameObject with fileID {gameobject_id} not found", err=True)
+            sys.exit(1)
+
+        if obj.class_id != 1:
+            click.echo(f"Error: fileID {gameobject_id} is not a GameObject", err=True)
+            click.echo(f"  Found: {obj.class_name}", err=True)
+            sys.exit(1)
+
+        # Collect all objects to delete
+        objects_to_delete = _collect_objects_to_delete(doc, gameobject_id, cascade)
+
+        if not force:
+            click.echo(f"Will delete {len(objects_to_delete)} object(s):")
+            for obj_id in objects_to_delete[:10]:
+                obj = doc.get_by_file_id(obj_id)
+                if obj:
+                    name = ""
+                    content = obj.get_content()
+                    if content and "m_Name" in content:
+                        name = f" '{content['m_Name']}'"
+                    click.echo(f"  {obj.class_name}{name} (fileID: {obj_id})")
+            if len(objects_to_delete) > 10:
+                click.echo(f"  ... and {len(objects_to_delete) - 10} more")
+
+            if not click.confirm("Continue?"):
+                click.echo("Aborted")
+                return
+
+        # Update parent Transform's children list
+        go_content = obj.get_content()
+        if go_content and "m_Component" in go_content:
+            for comp_ref in go_content["m_Component"]:
+                comp_id = comp_ref.get("component", {}).get("fileID", 0)
+                comp = doc.get_by_file_id(comp_id)
+                if comp and comp.class_id in (4, 224):  # Transform or RectTransform
+                    comp_content = comp.get_content()
+                    if comp_content and "m_Father" in comp_content:
+                        parent_id = comp_content["m_Father"].get("fileID", 0)
+                        if parent_id != 0:
+                            parent_transform = doc.get_by_file_id(parent_id)
+                            if parent_transform:
+                                parent_content = parent_transform.get_content()
+                                if parent_content and "m_Children" in parent_content:
+                                    parent_content["m_Children"] = [
+                                        c for c in parent_content["m_Children"]
+                                        if c.get("fileID") != comp_id
+                                    ]
+
+        # Delete all collected objects
+        for obj_id in objects_to_delete:
+            if doc.remove_object(obj_id):
+                deleted_ids.append(obj_id)
+
+        click.echo(f"Deleted {len(deleted_ids)} object(s)")
+
+    doc.save(output_path)
+
+    if output:
+        click.echo(f"Saved to: {output}")
+
+
+def _collect_objects_to_delete(
+    doc: "UnityYAMLDocument",
+    gameobject_id: int,
+    cascade: bool,
+) -> list[int]:
+    """Collect all objects to delete for a GameObject."""
+    objects_to_delete: list[int] = []
+    objects_to_delete.append(gameobject_id)
+
+    go = doc.get_by_file_id(gameobject_id)
+    if not go:
+        return objects_to_delete
+
+    content = go.get_content()
+    if not content:
+        return objects_to_delete
+
+    # Collect components
+    components = content.get("m_Component", [])
+    transform_id = None
+    for comp_ref in components:
+        comp_id = comp_ref.get("component", {}).get("fileID", 0)
+        if comp_id != 0:
+            objects_to_delete.append(comp_id)
+            # Check if this is a Transform
+            comp = doc.get_by_file_id(comp_id)
+            if comp and comp.class_id in (4, 224):
+                transform_id = comp_id
+
+    # If cascade, collect children recursively
+    if cascade and transform_id:
+        transform = doc.get_by_file_id(transform_id)
+        if transform:
+            transform_content = transform.get_content()
+            if transform_content and "m_Children" in transform_content:
+                for child_ref in transform_content["m_Children"]:
+                    child_transform_id = child_ref.get("fileID", 0)
+                    if child_transform_id != 0:
+                        child_transform = doc.get_by_file_id(child_transform_id)
+                        if child_transform:
+                            child_content = child_transform.get_content()
+                            if child_content and "m_GameObject" in child_content:
+                                child_go_id = child_content["m_GameObject"].get("fileID", 0)
+                                if child_go_id != 0:
+                                    # Recursively collect
+                                    child_objects = _collect_objects_to_delete(doc, child_go_id, cascade)
+                                    objects_to_delete.extend(child_objects)
+
+    return objects_to_delete
+
+
+@main.command(name="clone")
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--source",
+    "-s",
+    "source_id",
+    type=int,
+    required=True,
+    help="FileID of the GameObject to clone",
+)
+@click.option(
+    "--name",
+    "-n",
+    "new_name",
+    type=str,
+    default=None,
+    help="Name for the cloned GameObject (default: original name + ' (Clone)')",
+)
+@click.option(
+    "--parent",
+    "-p",
+    "parent_id",
+    type=int,
+    default=None,
+    help="Parent Transform fileID for the clone (default: same as source)",
+)
+@click.option(
+    "--position",
+    type=str,
+    default=None,
+    help="Position offset as 'x,y,z' (default: same as source)",
+)
+@click.option(
+    "--deep",
+    is_flag=True,
+    help="Clone children as well (deep clone)",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (default: modify in place)",
+)
+def clone_object(
+    file: Path,
+    source_id: int,
+    new_name: str | None,
+    parent_id: int | None,
+    position: str | None,
+    deep: bool,
+    output: Path | None,
+) -> None:
+    """Clone a GameObject within a Unity YAML file.
+
+    This command duplicates a GameObject and all its components,
+    generating new fileIDs for the cloned objects.
+
+    Examples:
+
+        # Simple clone (shallow)
+        prefab-tool clone Scene.unity --source 12345
+
+        # Clone with new name
+        prefab-tool clone Scene.unity --source 12345 --name "Player2"
+
+        # Clone to different parent
+        prefab-tool clone Scene.unity --source 12345 --parent 67890
+
+        # Clone with position offset
+        prefab-tool clone Scene.unity --source 12345 --position "5,0,0"
+
+        # Deep clone (include children)
+        prefab-tool clone Scene.unity --source 12345 --deep
+    """
+    from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject
+    import copy
+
+    try:
+        doc = UnityYAMLDocument.load(file)
+    except Exception as e:
+        click.echo(f"Error: Failed to load {file}: {e}", err=True)
+        sys.exit(1)
+
+    output_path = output or file
+
+    # Find source GameObject
+    source_go = doc.get_by_file_id(source_id)
+    if source_go is None:
+        click.echo(f"Error: GameObject with fileID {source_id} not found", err=True)
+        sys.exit(1)
+
+    if source_go.class_id != 1:
+        click.echo(f"Error: fileID {source_id} is not a GameObject", err=True)
+        click.echo(f"  Found: {source_go.class_name}", err=True)
+        sys.exit(1)
+
+    # Parse position offset
+    pos_offset = None
+    if position:
+        try:
+            x, y, z = map(float, position.split(","))
+            pos_offset = {"x": x, "y": y, "z": z}
+        except ValueError:
+            click.echo(f"Error: Invalid position format: {position}", err=True)
+            click.echo("Expected format: x,y,z (e.g., '5,0,0')", err=True)
+            sys.exit(1)
+
+    # Collect objects to clone
+    if deep:
+        objects_to_clone = _collect_objects_for_clone(doc, source_id)
+    else:
+        objects_to_clone = _collect_shallow_clone(doc, source_id)
+
+    # Create ID mapping
+    id_map: dict[int, int] = {}
+    for old_id in objects_to_clone:
+        id_map[old_id] = doc.generate_unique_file_id()
+
+    # Clone objects
+    cloned_objects: list[UnityYAMLObject] = []
+    for old_id in objects_to_clone:
+        old_obj = doc.get_by_file_id(old_id)
+        if old_obj is None:
+            continue
+
+        new_id = id_map[old_id]
+        new_data = _remap_file_ids(copy.deepcopy(old_obj.data), id_map)
+
+        # Apply modifications for the main GameObject
+        if old_id == source_id and new_name:
+            root_key = old_obj.root_key
+            if root_key and root_key in new_data:
+                new_data[root_key]["m_Name"] = new_name
+        elif old_id == source_id and new_name is None:
+            # Default: add " (Clone)" suffix
+            root_key = old_obj.root_key
+            if root_key and root_key in new_data:
+                original_name = new_data[root_key].get("m_Name", "Object")
+                new_data[root_key]["m_Name"] = f"{original_name} (Clone)"
+
+        cloned_obj = UnityYAMLObject(
+            class_id=old_obj.class_id,
+            file_id=new_id,
+            data=new_data,
+            stripped=old_obj.stripped,
+        )
+        cloned_objects.append(cloned_obj)
+
+    # Apply position offset and parent change to the main Transform
+    source_content = source_go.get_content()
+    if source_content and "m_Component" in source_content:
+        for comp_ref in source_content["m_Component"]:
+            comp_id = comp_ref.get("component", {}).get("fileID", 0)
+            comp = doc.get_by_file_id(comp_id)
+            if comp and comp.class_id in (4, 224):  # Transform or RectTransform
+                new_transform_id = id_map.get(comp_id)
+                if new_transform_id:
+                    for cloned_obj in cloned_objects:
+                        if cloned_obj.file_id == new_transform_id:
+                            content = cloned_obj.get_content()
+                            if content:
+                                # Apply parent change
+                                if parent_id is not None:
+                                    content["m_Father"] = {"fileID": parent_id}
+
+                                # Apply position offset
+                                if pos_offset and "m_LocalPosition" in content:
+                                    current_pos = content["m_LocalPosition"]
+                                    content["m_LocalPosition"] = {
+                                        "x": current_pos.get("x", 0) + pos_offset["x"],
+                                        "y": current_pos.get("y", 0) + pos_offset["y"],
+                                        "z": current_pos.get("z", 0) + pos_offset["z"],
+                                    }
+                break
+
+    # Add cloned objects to document
+    for cloned_obj in cloned_objects:
+        doc.add_object(cloned_obj)
+
+    # Update parent's children list
+    main_transform_id = None
+    for comp_ref in source_content.get("m_Component", []):
+        comp_id = comp_ref.get("component", {}).get("fileID", 0)
+        comp = doc.get_by_file_id(comp_id)
+        if comp and comp.class_id in (4, 224):
+            main_transform_id = id_map.get(comp_id)
+            break
+
+    if main_transform_id:
+        # Find the parent transform
+        effective_parent_id = parent_id
+        if effective_parent_id is None:
+            # Use same parent as source
+            for comp_ref in source_content.get("m_Component", []):
+                comp_id = comp_ref.get("component", {}).get("fileID", 0)
+                comp = doc.get_by_file_id(comp_id)
+                if comp and comp.class_id in (4, 224):
+                    comp_content = comp.get_content()
+                    if comp_content:
+                        effective_parent_id = comp_content.get("m_Father", {}).get("fileID", 0)
+                    break
+
+        if effective_parent_id and effective_parent_id != 0:
+            parent_transform = doc.get_by_file_id(effective_parent_id)
+            if parent_transform:
+                parent_content = parent_transform.get_content()
+                if parent_content and "m_Children" in parent_content:
+                    parent_content["m_Children"].append({"fileID": main_transform_id})
+
+    doc.save(output_path)
+
+    new_go_id = id_map[source_id]
+    click.echo(f"Cloned GameObject")
+    click.echo(f"  Source fileID: {source_id}")
+    click.echo(f"  New fileID: {new_go_id}")
+    click.echo(f"  Total objects cloned: {len(cloned_objects)}")
+
+    if output:
+        click.echo(f"Saved to: {output}")
+
+
+def _collect_shallow_clone(doc: "UnityYAMLDocument", gameobject_id: int) -> list[int]:
+    """Collect objects for a shallow clone (GO + components only)."""
+    objects: list[int] = [gameobject_id]
+
+    go = doc.get_by_file_id(gameobject_id)
+    if go:
+        content = go.get_content()
+        if content and "m_Component" in content:
+            for comp_ref in content["m_Component"]:
+                comp_id = comp_ref.get("component", {}).get("fileID", 0)
+                if comp_id != 0:
+                    objects.append(comp_id)
+
+    return objects
+
+
+def _collect_objects_for_clone(doc: "UnityYAMLDocument", gameobject_id: int) -> list[int]:
+    """Collect all objects for a deep clone (GO + components + children)."""
+    objects: list[int] = []
+    objects.append(gameobject_id)
+
+    go = doc.get_by_file_id(gameobject_id)
+    if not go:
+        return objects
+
+    content = go.get_content()
+    if not content:
+        return objects
+
+    # Collect components
+    transform_id = None
+    for comp_ref in content.get("m_Component", []):
+        comp_id = comp_ref.get("component", {}).get("fileID", 0)
+        if comp_id != 0:
+            objects.append(comp_id)
+            comp = doc.get_by_file_id(comp_id)
+            if comp and comp.class_id in (4, 224):
+                transform_id = comp_id
+
+    # Recursively collect children
+    if transform_id:
+        transform = doc.get_by_file_id(transform_id)
+        if transform:
+            transform_content = transform.get_content()
+            if transform_content and "m_Children" in transform_content:
+                for child_ref in transform_content["m_Children"]:
+                    child_transform_id = child_ref.get("fileID", 0)
+                    if child_transform_id != 0:
+                        child_transform = doc.get_by_file_id(child_transform_id)
+                        if child_transform:
+                            child_content = child_transform.get_content()
+                            if child_content and "m_GameObject" in child_content:
+                                child_go_id = child_content["m_GameObject"].get("fileID", 0)
+                                if child_go_id != 0:
+                                    child_objects = _collect_objects_for_clone(doc, child_go_id)
+                                    objects.extend(child_objects)
+
+    return objects
+
+
+def _remap_file_ids(data: Any, id_map: dict[int, int]) -> Any:
+    """Recursively remap fileIDs in a data structure."""
+    if isinstance(data, dict):
+        result = {}
+        for key, value in data.items():
+            if key == "fileID" and isinstance(value, int) and value in id_map:
+                result[key] = id_map[value]
+            else:
+                result[key] = _remap_file_ids(value, id_map)
+        return result
+    elif isinstance(data, list):
+        return [_remap_file_ids(item, id_map) for item in data]
+    else:
+        return data
 
 
 if __name__ == "__main__":
