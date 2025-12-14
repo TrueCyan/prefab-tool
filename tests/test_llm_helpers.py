@@ -411,20 +411,18 @@ class TestRectTransformExportImport:
 
         assert len(rect_transforms) > 0
 
-        # Check that rectTransform and editorValues are exported
+        # Check that rectTransform is exported (single field for all values)
         file_id, rt_data = rect_transforms[0]
         assert "rectTransform" in rt_data
-        assert "editorValues" in rt_data
 
-        # Check rectTransform structure
+        # Check rectTransform structure (Inspector-style values)
         assert "anchorMin" in rt_data["rectTransform"]
         assert "anchorMax" in rt_data["rectTransform"]
-        assert "anchoredPosition" in rt_data["rectTransform"]
-        assert "sizeDelta" in rt_data["rectTransform"]
         assert "pivot" in rt_data["rectTransform"]
+        # Mode-specific: either posX/posY/width/height or left/right/top/bottom
 
-    def test_import_rect_transform_from_editor_values(self):
-        """Test importing RectTransform using editorValues."""
+    def test_import_rect_transform(self):
+        """Test importing RectTransform using rectTransform field."""
         # Create a document with a RectTransform
         doc = UnityYAMLDocument()
         go = create_game_object("TestUI", file_id=100000, components=[200000])
@@ -435,8 +433,8 @@ class TestRectTransformExportImport:
         # Export to JSON
         json_data = export_to_json(doc, include_raw=True)
 
-        # Modify using editorValues (what LLM would do)
-        json_data.components["200000"]["editorValues"] = {
+        # Modify using rectTransform (what LLM would do)
+        json_data.components["200000"]["rectTransform"] = {
             "anchorMin": {"x": 0, "y": 0},
             "anchorMax": {"x": 1, "y": 1},
             "pivot": {"x": 0.5, "y": 0.5},
@@ -555,3 +553,264 @@ class TestDocumentObjectManagement:
         yaml_content = doc.dump()
         assert "MyUIElement" in yaml_content
         assert "RectTransform" in yaml_content
+
+
+class TestLayoutDrivenProperties:
+    """Tests for layout-driven property detection and marking."""
+
+    def test_content_size_fitter_marks_driven_properties(self):
+        """Test that ContentSizeFitter marks width/height as driven."""
+        doc = UnityYAMLDocument()
+
+        # Create GameObject with RectTransform and ContentSizeFitter
+        go_id = doc.generate_unique_file_id()
+        rt_id = doc.generate_unique_file_id()
+        csf_id = doc.generate_unique_file_id()
+
+        go = create_game_object(
+            "TextContainer",
+            file_id=go_id,
+            components=[rt_id, csf_id],
+        )
+        rt = create_rect_transform(
+            game_object_id=go_id,
+            file_id=rt_id,
+            size_delta={"x": 100, "y": 50},
+        )
+        # ContentSizeFitter with both horizontal and vertical fit
+        csf = create_mono_behaviour(
+            game_object_id=go_id,
+            file_id=csf_id,
+            script_guid="3245ec927659c4140ac4f8d17403cc18",  # ContentSizeFitter
+            properties={
+                "m_HorizontalFit": 2,  # PreferredSize
+                "m_VerticalFit": 2,    # PreferredSize
+            },
+        )
+
+        doc.add_object(go)
+        doc.add_object(rt)
+        doc.add_object(csf)
+
+        # Export to JSON
+        json_data = export_to_json(doc)
+
+        # Check RectTransform has _layoutDriven info
+        rt_json = json_data.components[str(rt_id)]
+        assert "_layoutDriven" in rt_json
+        assert rt_json["_layoutDriven"]["drivenBy"] == "ContentSizeFitter"
+        assert "width" in rt_json["_layoutDriven"]["drivenProperties"]
+        assert "height" in rt_json["_layoutDriven"]["drivenProperties"]
+        assert rt_json["_layoutDriven"]["driverComponentId"] == str(csf_id)
+
+        # Driven properties should show "<driven>" placeholder
+        assert rt_json["rectTransform"]["width"] == "<driven>"
+        assert rt_json["rectTransform"]["height"] == "<driven>"
+
+    def test_content_size_fitter_horizontal_only(self):
+        """Test ContentSizeFitter with only horizontal fit."""
+        doc = UnityYAMLDocument()
+
+        go_id = doc.generate_unique_file_id()
+        rt_id = doc.generate_unique_file_id()
+        csf_id = doc.generate_unique_file_id()
+
+        go = create_game_object("HorzFit", file_id=go_id, components=[rt_id, csf_id])
+        rt = create_rect_transform(
+            game_object_id=go_id,
+            file_id=rt_id,
+            size_delta={"x": 200, "y": 100},  # Set explicit size
+        )
+        csf = create_mono_behaviour(
+            game_object_id=go_id,
+            file_id=csf_id,
+            script_guid="3245ec927659c4140ac4f8d17403cc18",
+            properties={
+                "m_HorizontalFit": 1,  # MinSize
+                "m_VerticalFit": 0,    # Unconstrained
+            },
+        )
+
+        doc.add_object(go)
+        doc.add_object(rt)
+        doc.add_object(csf)
+
+        json_data = export_to_json(doc)
+        rt_json = json_data.components[str(rt_id)]
+
+        assert "_layoutDriven" in rt_json
+        assert "width" in rt_json["_layoutDriven"]["drivenProperties"]
+        assert "height" not in rt_json["_layoutDriven"]["drivenProperties"]
+
+        # Only width should be driven, height should have actual value
+        assert rt_json["rectTransform"]["width"] == "<driven>"
+        assert rt_json["rectTransform"]["height"] == 100.0
+
+    def test_layout_group_marks_children_as_driven(self):
+        """Test that VerticalLayoutGroup marks children's properties as driven."""
+        doc = UnityYAMLDocument()
+
+        # Parent with VerticalLayoutGroup
+        parent_go_id = doc.generate_unique_file_id()
+        parent_rt_id = doc.generate_unique_file_id()
+        vlg_id = doc.generate_unique_file_id()
+
+        # Child
+        child_go_id = doc.generate_unique_file_id()
+        child_rt_id = doc.generate_unique_file_id()
+
+        parent_go = create_game_object(
+            "LayoutParent",
+            file_id=parent_go_id,
+            components=[parent_rt_id, vlg_id],
+        )
+        parent_rt = create_rect_transform(
+            game_object_id=parent_go_id,
+            file_id=parent_rt_id,
+            children_ids=[child_rt_id],
+        )
+        vlg = create_mono_behaviour(
+            game_object_id=parent_go_id,
+            file_id=vlg_id,
+            script_guid="59f8146938fff824cb5fd77236b75775",  # VerticalLayoutGroup
+            properties={
+                "m_ChildControlWidth": 1,
+                "m_ChildControlHeight": 1,
+            },
+        )
+
+        child_go = create_game_object(
+            "LayoutChild",
+            file_id=child_go_id,
+            components=[child_rt_id],
+        )
+        child_rt = create_rect_transform(
+            game_object_id=child_go_id,
+            file_id=child_rt_id,
+            parent_id=parent_rt_id,
+        )
+
+        doc.add_object(parent_go)
+        doc.add_object(parent_rt)
+        doc.add_object(vlg)
+        doc.add_object(child_go)
+        doc.add_object(child_rt)
+
+        json_data = export_to_json(doc)
+
+        # Parent RectTransform should NOT have _layoutDriven
+        parent_rt_json = json_data.components[str(parent_rt_id)]
+        assert "_layoutDriven" not in parent_rt_json
+
+        # Child RectTransform SHOULD have _layoutDriven
+        child_rt_json = json_data.components[str(child_rt_id)]
+        assert "_layoutDriven" in child_rt_json
+        assert child_rt_json["_layoutDriven"]["drivenBy"] == "VerticalLayoutGroup"
+        assert "width" in child_rt_json["_layoutDriven"]["drivenProperties"]
+        assert "height" in child_rt_json["_layoutDriven"]["drivenProperties"]
+        assert "posX" in child_rt_json["_layoutDriven"]["drivenProperties"]
+        assert "posY" in child_rt_json["_layoutDriven"]["drivenProperties"]
+
+    def test_no_layout_component_no_driven_marker(self):
+        """Test that RectTransform without layout components has no _layoutDriven."""
+        doc = UnityYAMLDocument()
+
+        go_id = doc.generate_unique_file_id()
+        rt_id = doc.generate_unique_file_id()
+
+        go = create_game_object("NormalUI", file_id=go_id, components=[rt_id])
+        rt = create_rect_transform(game_object_id=go_id, file_id=rt_id)
+
+        doc.add_object(go)
+        doc.add_object(rt)
+
+        json_data = export_to_json(doc)
+        rt_json = json_data.components[str(rt_id)]
+
+        assert "_layoutDriven" not in rt_json
+
+    def test_import_normalizes_driven_properties(self):
+        """Test that import normalizes driven properties to 0."""
+        doc = UnityYAMLDocument()
+
+        go_id = doc.generate_unique_file_id()
+        rt_id = doc.generate_unique_file_id()
+        csf_id = doc.generate_unique_file_id()
+
+        go = create_game_object("Test", file_id=go_id, components=[rt_id, csf_id])
+        rt = create_rect_transform(
+            game_object_id=go_id,
+            file_id=rt_id,
+            size_delta={"x": 200, "y": 100},
+        )
+        csf = create_mono_behaviour(
+            game_object_id=go_id,
+            file_id=csf_id,
+            script_guid="3245ec927659c4140ac4f8d17403cc18",
+            properties={"m_HorizontalFit": 2, "m_VerticalFit": 2},
+        )
+
+        doc.add_object(go)
+        doc.add_object(rt)
+        doc.add_object(csf)
+
+        # Export to JSON
+        json_data = export_to_json(doc)
+
+        # Even if LLM modifies the driven values, they should be normalized to 0
+        rt_json = json_data.components[str(rt_id)]
+
+        # The values are "<driven>" so LLM might try to change them
+        # but they should normalize to 0 on import
+        rt_json["rectTransform"]["width"] = 300  # Try to change
+        rt_json["rectTransform"]["height"] = 150  # Try to change
+
+        # Import back
+        doc2 = import_from_json(json_data)
+
+        # Driven properties should be normalized to 0 regardless of what was set
+        rt2 = doc2.get_by_file_id(rt_id)
+        content = rt2.get_content()
+        assert content["m_SizeDelta"]["x"] == 0  # Normalized to 0
+        assert content["m_SizeDelta"]["y"] == 0  # Normalized to 0
+
+    def test_import_preserves_non_driven_properties(self):
+        """Test that import preserves non-driven properties correctly."""
+        doc = UnityYAMLDocument()
+
+        go_id = doc.generate_unique_file_id()
+        rt_id = doc.generate_unique_file_id()
+        csf_id = doc.generate_unique_file_id()
+
+        go = create_game_object("Test", file_id=go_id, components=[rt_id, csf_id])
+        rt = create_rect_transform(
+            game_object_id=go_id,
+            file_id=rt_id,
+            size_delta={"x": 200, "y": 100},
+        )
+        # Only horizontal fit - height is NOT driven
+        csf = create_mono_behaviour(
+            game_object_id=go_id,
+            file_id=csf_id,
+            script_guid="3245ec927659c4140ac4f8d17403cc18",
+            properties={"m_HorizontalFit": 2, "m_VerticalFit": 0},
+        )
+
+        doc.add_object(go)
+        doc.add_object(rt)
+        doc.add_object(csf)
+
+        # Export to JSON
+        json_data = export_to_json(doc)
+        rt_json = json_data.components[str(rt_id)]
+
+        # Modify the non-driven height
+        rt_json["rectTransform"]["height"] = 250
+
+        # Import back
+        doc2 = import_from_json(json_data)
+
+        rt2 = doc2.get_by_file_id(rt_id)
+        content = rt2.get_content()
+        assert content["m_SizeDelta"]["x"] == 0    # Width driven -> normalized to 0
+        assert content["m_SizeDelta"]["y"] == 250  # Height NOT driven -> preserved

@@ -292,6 +292,33 @@ def create_rect_transform_file_values(
 # Reverse mapping: class name -> class ID
 CLASS_NAME_TO_ID = {name: id for id, name in CLASS_IDS.items()}
 
+# =============================================================================
+# Layout-Driven Properties Detection
+# =============================================================================
+
+# Layout components that drive RectTransform properties on the SAME GameObject
+# These components modify their own RectTransform's size
+SELF_DRIVING_LAYOUT_GUIDS = {
+    # ContentSizeFitter - drives width/height based on content
+    "3245ec927659c4140ac4f8d17403cc18": "ContentSizeFitter",
+    # AspectRatioFitter - drives width or height to maintain aspect ratio
+    "306cc8c2b49d7114eaa3623786fc2126": "AspectRatioFitter",
+}
+
+# Layout components that drive RectTransform properties on CHILD GameObjects
+# These components modify their children's RectTransform position/size
+CHILD_DRIVING_LAYOUT_GUIDS = {
+    # VerticalLayoutGroup - arranges children vertically
+    "59f8146938fff824cb5fd77236b75775": "VerticalLayoutGroup",
+    # HorizontalLayoutGroup - arranges children horizontally
+    "30649d3a9faa99c48a7b1166b86bf2a0": "HorizontalLayoutGroup",
+    # GridLayoutGroup - arranges children in a grid
+    "8a8695521f0d02e499659fee002a26c2": "GridLayoutGroup",
+}
+
+# Combined for quick lookup
+ALL_LAYOUT_GUIDS = {**SELF_DRIVING_LAYOUT_GUIDS, **CHILD_DRIVING_LAYOUT_GUIDS}
+
 # Fields that are represented in the structured format (not raw)
 STRUCTURED_FIELDS = {
     # GameObject fields
@@ -354,6 +381,165 @@ class PrefabJSON:
         return cls.from_dict(data)
 
 
+def _analyze_layout_driven_properties(doc: UnityYAMLDocument) -> dict[str, dict[str, Any]]:
+    """Analyze which RectTransforms have layout-driven properties.
+
+    Returns a dict mapping RectTransform fileID -> driven info:
+    {
+        "rectTransformFileId": {
+            "drivenBy": "ContentSizeFitter",  # or other layout component
+            "drivenProperties": ["width", "height"],  # which properties are driven
+            "driverComponentId": "123456",  # fileID of the layout component
+        }
+    }
+    """
+    driven_info: dict[str, dict[str, Any]] = {}
+
+    # Build lookup tables
+    # gameObjectId -> list of component fileIDs
+    go_components: dict[str, list[str]] = {}
+    # componentId -> component object
+    component_objs: dict[str, tuple[UnityYAMLObject, dict[str, Any]]] = {}
+    # gameObjectId -> RectTransform fileID
+    go_rect_transform: dict[str, str] = {}
+    # RectTransform fileID -> parent RectTransform fileID
+    rect_parent: dict[str, str] = {}
+
+    # First pass: collect all objects
+    for obj in doc.objects:
+        content = obj.get_content()
+        if content is None:
+            continue
+
+        file_id = str(obj.file_id)
+
+        if obj.class_id == 1:  # GameObject
+            components = content.get("m_Component", [])
+            go_components[file_id] = [
+                str(c.get("component", {}).get("fileID", 0))
+                for c in components
+                if isinstance(c, dict) and "component" in c
+            ]
+        elif obj.class_id == 224:  # RectTransform
+            component_objs[file_id] = (obj, content)
+            # Map GameObject -> RectTransform
+            go_ref = content.get("m_GameObject", {})
+            if isinstance(go_ref, dict) and "fileID" in go_ref:
+                go_rect_transform[str(go_ref["fileID"])] = file_id
+            # Track parent
+            father = content.get("m_Father", {})
+            if isinstance(father, dict) and father.get("fileID", 0) != 0:
+                rect_parent[file_id] = str(father["fileID"])
+        elif obj.class_id == 114:  # MonoBehaviour
+            component_objs[file_id] = (obj, content)
+
+    # Second pass: find layout components and mark driven RectTransforms
+    for obj in doc.objects:
+        content = obj.get_content()
+        if content is None or obj.class_id != 114:
+            continue
+
+        file_id = str(obj.file_id)
+        script = content.get("m_Script", {})
+        if not isinstance(script, dict):
+            continue
+
+        guid = script.get("guid", "")
+
+        # Check if this is a self-driving layout component (ContentSizeFitter, AspectRatioFitter)
+        if guid in SELF_DRIVING_LAYOUT_GUIDS:
+            component_name = SELF_DRIVING_LAYOUT_GUIDS[guid]
+            go_ref = content.get("m_GameObject", {})
+            if isinstance(go_ref, dict) and "fileID" in go_ref:
+                go_id = str(go_ref["fileID"])
+                rect_id = go_rect_transform.get(go_id)
+                if rect_id:
+                    driven_props = _get_driven_properties_for_component(component_name, content)
+                    if driven_props:
+                        driven_info[rect_id] = {
+                            "drivenBy": component_name,
+                            "drivenProperties": driven_props,
+                            "driverComponentId": file_id,
+                        }
+
+        # Check if this is a child-driving layout component (LayoutGroups)
+        elif guid in CHILD_DRIVING_LAYOUT_GUIDS:
+            component_name = CHILD_DRIVING_LAYOUT_GUIDS[guid]
+            go_ref = content.get("m_GameObject", {})
+            if isinstance(go_ref, dict) and "fileID" in go_ref:
+                go_id = str(go_ref["fileID"])
+                parent_rect_id = go_rect_transform.get(go_id)
+                if parent_rect_id:
+                    # Find all children of this RectTransform
+                    for child_rect_id, parent_id in rect_parent.items():
+                        if parent_id == parent_rect_id:
+                            driven_props = _get_driven_properties_for_layout_child(component_name, content)
+                            if driven_props:
+                                # Merge with existing driven info (a child could have both
+                                # ContentSizeFitter and be in a LayoutGroup)
+                                if child_rect_id in driven_info:
+                                    existing = driven_info[child_rect_id]
+                                    existing["drivenProperties"] = list(set(
+                                        existing["drivenProperties"] + driven_props
+                                    ))
+                                    existing["drivenBy"] = f"{existing['drivenBy']}, {component_name}"
+                                else:
+                                    driven_info[child_rect_id] = {
+                                        "drivenBy": component_name,
+                                        "drivenProperties": driven_props,
+                                        "driverComponentId": file_id,
+                                    }
+
+    return driven_info
+
+
+def _get_driven_properties_for_component(component_name: str, content: dict[str, Any]) -> list[str]:
+    """Get which properties are driven by a self-driving layout component."""
+    driven = []
+
+    if component_name == "ContentSizeFitter":
+        # m_HorizontalFit: 0=Unconstrained, 1=MinSize, 2=PreferredSize
+        h_fit = content.get("m_HorizontalFit", 0)
+        v_fit = content.get("m_VerticalFit", 0)
+        if h_fit != 0:
+            driven.append("width")
+        if v_fit != 0:
+            driven.append("height")
+
+    elif component_name == "AspectRatioFitter":
+        # m_AspectMode: 0=None, 1=WidthControlsHeight, 2=HeightControlsWidth,
+        #               3=FitInParent, 4=EnvelopeParent
+        mode = content.get("m_AspectMode", 0)
+        if mode == 1:
+            driven.append("height")
+        elif mode == 2:
+            driven.append("width")
+        elif mode in (3, 4):
+            driven.extend(["width", "height"])
+
+    return driven
+
+
+def _get_driven_properties_for_layout_child(component_name: str, content: dict[str, Any]) -> list[str]:
+    """Get which properties are driven on children by a layout group."""
+    driven = []
+
+    if component_name in ("HorizontalLayoutGroup", "VerticalLayoutGroup"):
+        # Check childControlWidth/Height and childForceExpandWidth/Height
+        if content.get("m_ChildControlWidth", False):
+            driven.append("width")
+        if content.get("m_ChildControlHeight", False):
+            driven.append("height")
+        # Position is always driven in layout groups
+        driven.extend(["posX", "posY"])
+
+    elif component_name == "GridLayoutGroup":
+        # Grid always controls both size and position
+        driven.extend(["width", "height", "posX", "posY"])
+
+    return driven
+
+
 def export_to_json(doc: UnityYAMLDocument, include_raw: bool = True) -> PrefabJSON:
     """Export a Unity YAML document to JSON format.
 
@@ -372,6 +558,9 @@ def export_to_json(doc: UnityYAMLDocument, include_raw: bool = True) -> PrefabJS
         "objectCount": len(doc.objects),
     }
 
+    # Analyze layout-driven properties
+    driven_info = _analyze_layout_driven_properties(doc)
+
     # Process each object
     for obj in doc.objects:
         file_id = str(obj.file_id)
@@ -388,7 +577,9 @@ def export_to_json(doc: UnityYAMLDocument, include_raw: bool = True) -> PrefabJS
                     result.raw_fields[file_id] = raw
 
         else:  # Component (Transform, MonoBehaviour, etc.)
-            result.components[file_id] = _export_component(obj, content)
+            # Pass driven info for RectTransforms
+            rect_driven = driven_info.get(file_id) if obj.class_id == 224 else None
+            result.components[file_id] = _export_component(obj, content, rect_driven)
             if include_raw:
                 component_structured = _get_structured_fields_for_class(obj.class_id)
                 raw = _extract_raw_fields(content, component_structured)
@@ -419,8 +610,18 @@ def _export_game_object(obj: UnityYAMLObject, content: dict[str, Any]) -> dict[s
     return result
 
 
-def _export_component(obj: UnityYAMLObject, content: dict[str, Any]) -> dict[str, Any]:
-    """Export a component to JSON format."""
+def _export_component(
+    obj: UnityYAMLObject,
+    content: dict[str, Any],
+    driven_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Export a component to JSON format.
+
+    Args:
+        obj: The Unity YAML object
+        content: The object's content dict
+        driven_info: Optional layout-driven property info for RectTransforms
+    """
     result: dict[str, Any] = {
         "type": obj.class_name,
         "classId": obj.class_id,
@@ -440,7 +641,7 @@ def _export_component(obj: UnityYAMLObject, content: dict[str, Any]) -> dict[str
     if obj.class_id == 4:  # Transform
         result.update(_export_transform(content))
     elif obj.class_id == 224:  # RectTransform
-        result.update(_export_rect_transform(content))
+        result.update(_export_rect_transform(content, driven_info))
     elif obj.class_id == 114:  # MonoBehaviour
         result.update(_export_monobehaviour(content))
     elif obj.class_id == 1001:  # PrefabInstance
@@ -481,14 +682,31 @@ def _export_transform(content: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _export_rect_transform(content: dict[str, Any]) -> dict[str, Any]:
+def _export_rect_transform(
+    content: dict[str, Any],
+    driven_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Export RectTransform-specific fields.
 
-    Exports both the raw file values and the computed editor values
-    for easier manipulation by LLMs.
+    Exports values as shown in Unity Inspector (editor values) for intuitive
+    manipulation by LLMs. Each Unity field maps to exactly one JSON field.
+
+    Layout-driven properties are replaced with "<driven>" placeholder to:
+    1. Prevent LLMs from modifying values that will be overwritten at runtime
+    2. Ensure consistent output regardless of what Unity saved (no spurious diffs)
+
+    Args:
+        content: The RectTransform content dict
+        driven_info: Optional layout-driven property info containing:
+            - drivenBy: Name of the layout component driving properties
+            - drivenProperties: List of properties being driven (e.g., ["width", "height"])
+            - driverComponentId: fileID of the layout component
     """
     # Start with Transform fields
     result = _export_transform(content)
+
+    # Determine which properties are driven
+    driven_props = set(driven_info["drivenProperties"]) if driven_info else set()
 
     # Extract RectTransform-specific fields
     anchor_min = content.get("m_AnchorMin", {"x": 0.5, "y": 0.5})
@@ -498,16 +716,7 @@ def _export_rect_transform(content: dict[str, Any]) -> dict[str, Any]:
     pivot = content.get("m_Pivot", {"x": 0.5, "y": 0.5})
     local_position = content.get("m_LocalPosition", {"x": 0, "y": 0, "z": 0})
 
-    # Export raw file values (what's stored in the file)
-    result["rectTransform"] = {
-        "anchorMin": {"x": float(anchor_min.get("x", 0.5)), "y": float(anchor_min.get("y", 0.5))},
-        "anchorMax": {"x": float(anchor_max.get("x", 0.5)), "y": float(anchor_max.get("y", 0.5))},
-        "anchoredPosition": {"x": float(anchored_position.get("x", 0)), "y": float(anchored_position.get("y", 0))},
-        "sizeDelta": {"x": float(size_delta.get("x", 100)), "y": float(size_delta.get("y", 100))},
-        "pivot": {"x": float(pivot.get("x", 0.5)), "y": float(pivot.get("y", 0.5))},
-    }
-
-    # Convert to editor values for easier understanding
+    # Convert to editor values (what you see in Unity Inspector)
     file_vals = RectTransformFileValues(
         anchor_min=anchor_min,
         anchor_max=anchor_max,
@@ -518,28 +727,37 @@ def _export_rect_transform(content: dict[str, Any]) -> dict[str, Any]:
     )
     editor_vals = file_to_editor_values(file_vals)
 
-    # Export editor values (what you see in Unity Inspector)
-    result["editorValues"] = {
+    # Export as single "rectTransform" field with Inspector-style values
+    # Driven properties show "<driven>" placeholder instead of actual values
+    rt = result["rectTransform"] = {
         "anchorMin": {"x": editor_vals.anchor_min_x, "y": editor_vals.anchor_min_y},
         "anchorMax": {"x": editor_vals.anchor_max_x, "y": editor_vals.anchor_max_y},
         "pivot": {"x": editor_vals.pivot_x, "y": editor_vals.pivot_y},
         "posZ": editor_vals.pos_z,
     }
 
-    # Add mode-specific values
+    # Add mode-specific values, replacing driven properties with placeholder
     if editor_vals.is_stretch_horizontal:
-        result["editorValues"]["left"] = editor_vals.left
-        result["editorValues"]["right"] = editor_vals.right
+        rt["left"] = "<driven>" if "posX" in driven_props else editor_vals.left
+        rt["right"] = "<driven>" if "posX" in driven_props else editor_vals.right
     else:
-        result["editorValues"]["posX"] = editor_vals.pos_x
-        result["editorValues"]["width"] = editor_vals.width
+        rt["posX"] = "<driven>" if "posX" in driven_props else editor_vals.pos_x
+        rt["width"] = "<driven>" if "width" in driven_props else editor_vals.width
 
     if editor_vals.is_stretch_vertical:
-        result["editorValues"]["top"] = editor_vals.top
-        result["editorValues"]["bottom"] = editor_vals.bottom
+        rt["top"] = "<driven>" if "posY" in driven_props else editor_vals.top
+        rt["bottom"] = "<driven>" if "posY" in driven_props else editor_vals.bottom
     else:
-        result["editorValues"]["posY"] = editor_vals.pos_y
-        result["editorValues"]["height"] = editor_vals.height
+        rt["posY"] = "<driven>" if "posY" in driven_props else editor_vals.pos_y
+        rt["height"] = "<driven>" if "height" in driven_props else editor_vals.height
+
+    # Add layout-driven metadata if present (for reference only)
+    if driven_info:
+        result["_layoutDriven"] = {
+            "drivenBy": driven_info["drivenBy"],
+            "drivenProperties": driven_info["drivenProperties"],
+            "driverComponentId": driven_info["driverComponentId"],
+        }
 
     return result
 
@@ -936,35 +1154,50 @@ def _import_rect_transform(
 ) -> dict[str, Any]:
     """Import RectTransform-specific fields (extends Transform).
 
-    Supports three ways to specify RectTransform values:
-    1. From editorValues (what you see in Unity Inspector - recommended for LLMs)
-    2. From rectTransform (raw file values)
-    3. From raw_fields (fallback for round-trip)
+    Supports two ways to specify RectTransform values:
+    1. From rectTransform (Inspector-style values - posX/posY, width/height, etc.)
+    2. From raw_fields (fallback for round-trip)
+
+    Layout-driven properties (marked as "<driven>" or listed in _layoutDriven)
+    are normalized to 0, as they will be recalculated by Unity at runtime.
     """
     # Start with Transform fields
     content = _import_transform(data, raw_fields)
 
-    # Priority 1: Import from editorValues (easiest for LLMs)
-    if "editorValues" in data:
-        editor = data["editorValues"]
+    # Get driven properties if present
+    driven_props = set()
+    if "_layoutDriven" in data:
+        driven_props = set(data["_layoutDriven"].get("drivenProperties", []))
+
+    # Priority 1: Import from rectTransform (Inspector-style values)
+    if "rectTransform" in data:
+        rt = data["rectTransform"]
+
+        # Helper to get value, treating "<driven>" as None (will use default 0)
+        def get_val(key: str, default: float | None = None) -> float | None:
+            val = rt.get(key)
+            if val == "<driven>":
+                return None  # Will be handled as driven
+            return val if val is not None else default
 
         # Build editor values object
+        # Driven properties get None, which will result in 0 after conversion
         editor_vals = RectTransformEditorValues(
-            anchor_min_x=editor.get("anchorMin", {}).get("x", 0.5),
-            anchor_min_y=editor.get("anchorMin", {}).get("y", 0.5),
-            anchor_max_x=editor.get("anchorMax", {}).get("x", 0.5),
-            anchor_max_y=editor.get("anchorMax", {}).get("y", 0.5),
-            pivot_x=editor.get("pivot", {}).get("x", 0.5),
-            pivot_y=editor.get("pivot", {}).get("y", 0.5),
-            pos_z=editor.get("posZ", 0),
-            left=editor.get("left"),
-            right=editor.get("right"),
-            top=editor.get("top"),
-            bottom=editor.get("bottom"),
-            pos_x=editor.get("posX"),
-            pos_y=editor.get("posY"),
-            width=editor.get("width"),
-            height=editor.get("height"),
+            anchor_min_x=rt.get("anchorMin", {}).get("x", 0.5),
+            anchor_min_y=rt.get("anchorMin", {}).get("y", 0.5),
+            anchor_max_x=rt.get("anchorMax", {}).get("x", 0.5),
+            anchor_max_y=rt.get("anchorMax", {}).get("y", 0.5),
+            pivot_x=rt.get("pivot", {}).get("x", 0.5),
+            pivot_y=rt.get("pivot", {}).get("y", 0.5),
+            pos_z=rt.get("posZ", 0),
+            left=get_val("left"),
+            right=get_val("right"),
+            top=get_val("top"),
+            bottom=get_val("bottom"),
+            pos_x=get_val("posX"),
+            pos_y=get_val("posY"),
+            width=get_val("width"),
+            height=get_val("height"),
         )
 
         # Convert to file values
@@ -977,16 +1210,21 @@ def _import_rect_transform(
         content["m_Pivot"] = file_vals.pivot
         content["m_LocalPosition"]["z"] = file_vals.local_position_z
 
-    # Priority 2: Import from rectTransform (raw file values)
-    elif "rectTransform" in data:
-        rt = data["rectTransform"]
-        content["m_AnchorMin"] = rt.get("anchorMin", {"x": 0.5, "y": 0.5})
-        content["m_AnchorMax"] = rt.get("anchorMax", {"x": 0.5, "y": 0.5})
-        content["m_AnchoredPosition"] = rt.get("anchoredPosition", {"x": 0, "y": 0})
-        content["m_SizeDelta"] = rt.get("sizeDelta", {"x": 100, "y": 100})
-        content["m_Pivot"] = rt.get("pivot", {"x": 0.5, "y": 0.5})
+        # Normalize driven properties to 0
+        if "posX" in driven_props or "posY" in driven_props:
+            pos = content["m_AnchoredPosition"]
+            if "posX" in driven_props:
+                pos["x"] = 0
+            if "posY" in driven_props:
+                pos["y"] = 0
+        if "width" in driven_props or "height" in driven_props:
+            size = content["m_SizeDelta"]
+            if "width" in driven_props:
+                size["x"] = 0
+            if "height" in driven_props:
+                size["y"] = 0
 
-    # Priority 3: Fallback to raw_fields
+    # Priority 2: Fallback to raw_fields
     else:
         rect_fields = [
             ("m_AnchorMin", {"x": 0.5, "y": 0.5}),
