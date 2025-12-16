@@ -250,6 +250,15 @@ class UnityPrefabNormalizer:
         for field_name in fields_to_remove:
             del content[field_name]
 
+        # Third pass: add missing fields with default values
+        existing_names = set(content.keys())
+        missing_fields = script_info.get_missing_fields(existing_names)
+
+        for field in missing_fields:
+            # Only add if we have a valid default value
+            if field.default_value is not None:
+                content[field.unity_name] = field.default_value
+
     def _get_script_info(self, script_guid: str):
         """Get script info for a script by GUID (with caching).
 
