@@ -3221,6 +3221,38 @@ def add_object(
         click.echo(f"Saved to: {output}")
 
 
+# Package component name to GUID mapping
+# These are MonoBehaviour components from Unity packages
+PACKAGE_COMPONENT_GUIDS: dict[str, str] = {
+    # Unity UI (com.unity.ugui)
+    "Image": "fe87c0e1cc204ed48ad3b37840f39efc",
+    "Button": "4e29b1a8efbd4b44bb3f3716e73f07ff",
+    "ScrollRect": "1aa08ab6e0800fa44ae55d278d1423e3",
+    "Mask": "31a19414c41e5ae4aae2af33fee712f6",
+    "RectMask2D": "3312d7739989d2b4e91e6319e9a96d76",
+    "GraphicRaycaster": "dc42784cf147c0c48a680349fa168899",
+    "CanvasScaler": "0cd44c1031e13a943bb63640046fad76",
+    "VerticalLayoutGroup": "59f8146938fff824cb5fd77236b75775",
+    "HorizontalLayoutGroup": "30649d3a9faa99c48a7b1166b86bf2a0",
+    "ContentSizeFitter": "3245ec927659c4140ac4f8d17403cc18",
+    "TextMeshProUGUI": "f4688fdb7df04437aeb418b961361dc5",
+    "TMP_InputField": "2da0c512f12947e489f739169773d7ca",
+    "EventSystem": "76c392e42b5098c458856cdf6ecaaaa1",
+    "InputSystemUIInputModule": "01614664b831546d2ae94a42149d80ac",
+    # URP 2D Lighting
+    "Light2D": "073797afb82c5a1438f328866b10b3f0",
+}
+
+# Built-in component types (native Unity components)
+BUILTIN_COMPONENT_TYPES = [
+    "SpriteRenderer", "Camera", "Light", "AudioSource",
+    "BoxCollider2D", "CircleCollider2D", "Rigidbody2D",
+]
+
+# All supported component types for --type option
+ALL_COMPONENT_TYPES = BUILTIN_COMPONENT_TYPES + list(PACKAGE_COMPONENT_GUIDS.keys())
+
+
 @main.command(name="add-component")
 @click.argument("file", type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3234,12 +3266,9 @@ def add_object(
 @click.option(
     "--type",
     "component_type",
-    type=click.Choice([
-        "SpriteRenderer", "Camera", "Light", "AudioSource",
-        "BoxCollider2D", "CircleCollider2D", "Rigidbody2D",
-    ]),
+    type=click.Choice(ALL_COMPONENT_TYPES),
     default=None,
-    help="Built-in component type to add",
+    help="Component type to add (built-in or package component)",
 )
 @click.option(
     "--script",
@@ -3270,22 +3299,32 @@ def add_component(
 ) -> None:
     """Add a component to an existing GameObject.
 
-    Requires either --type for built-in components or --script for MonoBehaviour.
+    Requires either --type for components or --script for custom MonoBehaviour.
+
+    Supported component types include:
+    - Built-in: SpriteRenderer, Camera, Light, AudioSource, BoxCollider2D, etc.
+    - Package: Image, Button, TextMeshProUGUI, Light2D, EventSystem, etc.
 
     Examples:
 
         # Add a built-in component
         unityflow add-component Scene.unity --to 12345 --type SpriteRenderer
 
-        # Add a MonoBehaviour
+        # Add a package component (UI Image)
+        unityflow add-component Scene.unity --to 12345 --type Image
+
+        # Add TextMeshProUGUI
+        unityflow add-component Scene.unity --to 12345 --type TextMeshProUGUI
+
+        # Add Light2D (URP)
+        unityflow add-component Scene.unity --to 12345 --type Light2D
+
+        # Add a custom MonoBehaviour with script GUID
         unityflow add-component Scene.unity --to 12345 --script "abc123def456..."
 
         # Add with properties
-        unityflow add-component Scene.unity --to 12345 --script "abc123..." \\
-            --props '{"speed": 5.0, "health": 100}'
-
-        # Add Camera component
-        unityflow add-component Scene.unity --to 12345 --type Camera
+        unityflow add-component Scene.unity --to 12345 --type Image \\
+            --props '{"m_Color": {"r": 1, "g": 0, "b": 0, "a": 1}}'
     """
     from unityflow.parser import (
         UnityYAMLDocument,
@@ -3332,7 +3371,7 @@ def add_component(
     component_id = doc.generate_unique_file_id()
 
     if script_guid:
-        # Create MonoBehaviour
+        # Create MonoBehaviour with explicit script GUID
         component = create_mono_behaviour(
             game_object_id=target_id,
             script_guid=script_guid,
@@ -3340,6 +3379,16 @@ def add_component(
             properties=properties,
         )
         click.echo(f"Added MonoBehaviour component")
+    elif component_type in PACKAGE_COMPONENT_GUIDS:
+        # Create package component (MonoBehaviour with known GUID)
+        package_guid = PACKAGE_COMPONENT_GUIDS[component_type]
+        component = create_mono_behaviour(
+            game_object_id=target_id,
+            script_guid=package_guid,
+            file_id=component_id,
+            properties=properties,
+        )
+        click.echo(f"Added {component_type} component (package)")
     else:
         # Create built-in component
         component = _create_builtin_component(

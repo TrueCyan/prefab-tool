@@ -505,50 +505,69 @@ doc.save("output.prefab")  # 또는 .unity, .asset
 | 225 | CanvasGroup | 캔버스 그룹 |
 | 1001 | PrefabInstance | 프리팹 인스턴스 |
 
-**참고**: 패키지 컴포넌트(Light2D, TextMeshPro 등)는 `MonoBehaviour(114)`를 사용하며, 스크립트 GUID로 구분됩니다.
+**참고**: 패키지 컴포넌트(Light2D, TextMeshPro 등)는 `MonoBehaviour(114)`를 사용하며, **컴포넌트 이름으로 직접 추가**할 수 있습니다.
 
 ---
 
-## 패키지 컴포넌트 GUID 참조
+## 패키지 컴포넌트 추가
 
-Unity 패키지 컴포넌트들은 **MonoBehaviour(classId=114)**로 구현되며, 스크립트 GUID로 식별됩니다.
+패키지 컴포넌트들은 **이름으로 직접 추가**할 수 있습니다. GUID를 외울 필요 없이 `--type` 옵션으로 컴포넌트 이름만 지정하세요.
 
-### Unity UI 컴포넌트 (com.unity.ugui)
+```bash
+# UI 컴포넌트 추가
+unityflow add-component Scene.unity --to 12345 --type Image
+unityflow add-component Scene.unity --to 12345 --type Button
+unityflow add-component Scene.unity --to 12345 --type TextMeshProUGUI
 
-| 컴포넌트 | GUID |
-|----------|------|
-| Image | `fe87c0e1cc204ed48ad3b37840f39efc` |
-| Button | `4e29b1a8efbd4b44bb3f3716e73f07ff` |
-| ScrollRect | `1aa08ab6e0800fa44ae55d278d1423e3` |
-| Mask | `31a19414c41e5ae4aae2af33fee712f6` |
-| RectMask2D | `3312d7739989d2b4e91e6319e9a96d76` |
-| GraphicRaycaster | `dc42784cf147c0c48a680349fa168899` |
-| CanvasScaler | `0cd44c1031e13a943bb63640046fad76` |
-| VerticalLayoutGroup | `59f8146938fff824cb5fd77236b75775` |
-| HorizontalLayoutGroup | `30649d3a9faa99c48a7b1166b86bf2a0` |
-| ContentSizeFitter | `3245ec927659c4140ac4f8d17403cc18` |
-| TextMeshProUGUI | `f4688fdb7df04437aeb418b961361dc5` |
-| TMP_InputField | `2da0c512f12947e489f739169773d7ca` |
-| EventSystem | `76c392e42b5098c458856cdf6ecaaaa1` |
-| InputSystemUIInputModule | `01614664b831546d2ae94a42149d80ac` |
+# 레이아웃 컴포넌트
+unityflow add-component Scene.unity --to 12345 --type VerticalLayoutGroup
+unityflow add-component Scene.unity --to 12345 --type ContentSizeFitter
 
-### 렌더링 컴포넌트
+# 렌더링 컴포넌트
+unityflow add-component Scene.unity --to 12345 --type Light2D
 
-| 패키지 | 컴포넌트 | GUID |
-|--------|----------|------|
-| URP 2D | Light2D | `073797afb82c5a1438f328866b10b3f0` |
+# 시스템 컴포넌트
+unityflow add-component Scene.unity --to 12345 --type EventSystem
+
+# 속성과 함께 추가
+unityflow add-component Scene.unity --to 12345 --type Image \
+    --props '{"m_Color": {"r": 1, "g": 0, "b": 0, "a": 1}}'
+```
+
+### 지원되는 패키지 컴포넌트
+
+| 카테고리 | 컴포넌트 |
+|----------|----------|
+| **UI 기본** | Image, Button, ScrollRect, Mask, RectMask2D |
+| **UI 시스템** | GraphicRaycaster, CanvasScaler, EventSystem, InputSystemUIInputModule |
+| **레이아웃** | VerticalLayoutGroup, HorizontalLayoutGroup, ContentSizeFitter |
+| **텍스트** | TextMeshProUGUI, TMP_InputField |
+| **렌더링** | Light2D (URP 2D) |
+
+### 커스텀 스크립트 추가
+
+등록되지 않은 커스텀 스크립트는 `--script` 옵션으로 GUID를 직접 지정합니다:
+
+```bash
+# 커스텀 스크립트 GUID로 추가
+unityflow add-component Scene.unity --to 12345 --script "abc123def456..."
+
+# @ 프리픽스로 자동 GUID 해석 (set 명령에서 사용)
+unityflow set Player.prefab --path "components/12345/m_Script" \
+    --value "@Assets/Scripts/Player.cs"
+```
 
 ### GUID 조회 방법
 
 ```bash
-# 패키지 폴더에서 직접 추출
-grep "guid:" "Library/PackageCache/com.unity.ugui@*/Runtime/UGUI/UI/Core/Button.cs.meta"
-
-# scan-meta로 패키지 스캔
-unityflow scan-meta "Library/PackageCache/com.unity.ugui@*" -r --scripts-only
-
 # 사용 중인 스크립트 GUID 추출
 unityflow scan-scripts Scene.unity --show-properties
+
+# 패키지 폴더에서 GUID 추출
+unityflow scan-meta "Library/PackageCache/com.unity.ugui@*" -r --scripts-only
+
+# 프로젝트 스크립트 GUID 추출
+unityflow scan-meta Assets/Scripts -r --scripts-only
 ```
 
 ---
