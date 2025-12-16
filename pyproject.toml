@@ -45,6 +45,7 @@ all = [
 
 [project.scripts]
 unityflow = "unityflow.cli:main"
+unity-mcp = "unityflow.mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/TrueCyan/unityflow"
