@@ -6,9 +6,9 @@ to eliminate non-deterministic changes and reduce VCS noise.
 
 from importlib.metadata import version
 
-__version__ = version("prefab-tool")
+__version__ = version("unityflow")
 
-from prefab_tool.git_utils import (
+from unityflow.git_utils import (
     UNITY_ANIMATION_EXTENSIONS,
     UNITY_AUDIO_EXTENSIONS,
     UNITY_CORE_EXTENSIONS,
@@ -22,9 +22,9 @@ from prefab_tool.git_utils import (
     get_repo_root,
     is_git_repository,
 )
-from prefab_tool.normalizer import UnityPrefabNormalizer
-from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject
-from prefab_tool.asset_tracker import (
+from unityflow.normalizer import UnityPrefabNormalizer
+from unityflow.parser import UnityYAMLDocument, UnityYAMLObject
+from unityflow.asset_tracker import (
     BINARY_ASSET_EXTENSIONS,
     AssetDependency,
     AssetReference,
@@ -37,14 +37,14 @@ from prefab_tool.asset_tracker import (
     find_unity_project_root,
     get_file_dependencies,
 )
-from prefab_tool.query import (
+from unityflow.query import (
     QueryResult,
     query_path,
     set_value,
     get_value,
     merge_values,
 )
-from prefab_tool.script_parser import (
+from unityflow.script_parser import (
     ScriptInfo,
     SerializedField,
     ScriptFieldCache,

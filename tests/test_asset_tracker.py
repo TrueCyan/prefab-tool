@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from prefab_tool.asset_tracker import (
+from unityflow.asset_tracker import (
     BINARY_ASSET_EXTENSIONS,
     AssetDependency,
     AssetReference,

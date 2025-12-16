@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from prefab_tool.cli import main
-from prefab_tool.git_utils import (
+from unityflow.cli import main
+from unityflow.git_utils import (
     UNITY_EXTENSIONS,
     filter_unity_files,
     get_changed_files,

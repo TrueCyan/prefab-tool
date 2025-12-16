@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from prefab_tool.cli import main
+from unityflow.cli import main
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -340,12 +340,12 @@ class TestVersionOption:
 
     def test_version(self, runner):
         """Test --version flag."""
-        from prefab_tool import __version__
+        from unityflow import __version__
 
         result = runner.invoke(main, ["--version"])
 
         assert result.exit_code == 0
-        assert "prefab-tool" in result.output
+        assert "unityflow" in result.output
         assert __version__ in result.output
 
 

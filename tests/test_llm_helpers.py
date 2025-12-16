@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from prefab_tool.parser import (
+from unityflow.parser import (
     UnityYAMLDocument,
     UnityYAMLObject,
     generate_file_id,
@@ -12,7 +12,7 @@ from prefab_tool.parser import (
     create_rect_transform,
     create_mono_behaviour,
 )
-from prefab_tool.formats import (
+from unityflow.formats import (
     RectTransformEditorValues,
     RectTransformFileValues,
     editor_to_file_values,

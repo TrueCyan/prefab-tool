@@ -6,7 +6,7 @@
 
 repos:
   # Unity Prefab Normalizer - eliminates VCS noise from Unity files
-  - repo: https://github.com/TrueCyan/prefab-tool
+  - repo: https://github.com/TrueCyan/unityflow
     rev: v0.1.0  # Use the latest tag
     hooks:
       # Option 1: Normalize all staged Unity files (recommended)

@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject, CLASS_IDS
+from unityflow.parser import UnityYAMLDocument, UnityYAMLObject, CLASS_IDS
 
 # Valid GUID pattern: 32 hexadecimal characters
 GUID_PATTERN = re.compile(r"^[0-9a-fA-F]{32}$")

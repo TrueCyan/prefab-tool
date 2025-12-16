@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from prefab_tool.formats import (
+from unityflow.formats import (
     export_to_json,
     export_file_to_json,
     import_from_json,
@@ -13,7 +13,7 @@ from prefab_tool.formats import (
     get_summary,
     PrefabJSON,
 )
-from prefab_tool.parser import UnityYAMLDocument
+from unityflow.parser import UnityYAMLDocument
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

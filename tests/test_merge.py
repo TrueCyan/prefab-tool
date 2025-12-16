@@ -2,7 +2,7 @@
 
 import pytest
 
-from prefab_tool.merge import (
+from unityflow.merge import (
     three_way_merge,
     merge_lines,
     compute_changes,

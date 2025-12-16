@@ -9,8 +9,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterator
 
-from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject
-from prefab_tool.formats import export_to_json, PrefabJSON
+from unityflow.parser import UnityYAMLDocument, UnityYAMLObject
+from unityflow.formats import export_to_json, PrefabJSON
 
 
 @dataclass

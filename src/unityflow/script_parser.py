@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
-from prefab_tool.asset_tracker import GUIDIndex, build_guid_index, find_unity_project_root
+from unityflow.asset_tracker import GUIDIndex, build_guid_index, find_unity_project_root
 
 
 @dataclass

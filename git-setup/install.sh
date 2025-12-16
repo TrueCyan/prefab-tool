@@ -1,21 +1,21 @@
 #!/bin/bash
-# Install prefab-tool git integration
+# Install unityflow git integration
 # Run this script from your Unity project root
 
 set -e
 
-echo "=== prefab-tool Git Integration Setup ==="
+echo "=== unityflow Git Integration Setup ==="
 echo
 
-# Check if prefab-tool is installed
-if ! command -v prefab-tool &> /dev/null; then
-    echo "Error: prefab-tool is not installed or not in PATH"
-    echo "Install it with: pip install prefab-tool"
+# Check if unityflow is installed
+if ! command -v unityflow &> /dev/null; then
+    echo "Error: unityflow is not installed or not in PATH"
+    echo "Install it with: pip install unityflow"
     exit 1
 fi
 
-PREFAB_TOOL_PATH=$(which prefab-tool)
-echo "Found prefab-tool at: $PREFAB_TOOL_PATH"
+PREFAB_TOOL_PATH=$(which unityflow)
+echo "Found unityflow at: $PREFAB_TOOL_PATH"
 
 # Setup options
 SCOPE="${1:-local}"  # local, global, or pre-commit
@@ -41,14 +41,14 @@ if [ "$SCOPE" = "pre-commit" ]; then
     PRECOMMIT_CONFIG=".pre-commit-config.yaml"
     if [ -f "$PRECOMMIT_CONFIG" ]; then
         echo "Found existing $PRECOMMIT_CONFIG"
-        if grep -q "prefab-tool" "$PRECOMMIT_CONFIG"; then
-            echo "prefab-tool hook already configured"
+        if grep -q "unityflow" "$PRECOMMIT_CONFIG"; then
+            echo "unityflow hook already configured"
         else
-            echo "Adding prefab-tool hook to existing config..."
+            echo "Adding unityflow hook to existing config..."
             echo "" >> "$PRECOMMIT_CONFIG"
             cat >> "$PRECOMMIT_CONFIG" << 'EOF'
   # Unity Prefab Normalizer
-  - repo: https://github.com/TrueCyan/prefab-tool
+  - repo: https://github.com/TrueCyan/unityflow
     rev: v0.1.0
     hooks:
       - id: prefab-normalize
@@ -60,7 +60,7 @@ EOF
 # See https://pre-commit.com for more information
 repos:
   # Unity Prefab Normalizer
-  - repo: https://github.com/TrueCyan/prefab-tool
+  - repo: https://github.com/TrueCyan/unityflow
     rev: v0.1.0
     hooks:
       - id: prefab-normalize
@@ -107,13 +107,13 @@ fi
 
 # Configure diff driver
 echo "Configuring diff driver..."
-$GIT_CONFIG_CMD diff.unity.textconv "prefab-tool git-textconv"
+$GIT_CONFIG_CMD diff.unity.textconv "unityflow git-textconv"
 $GIT_CONFIG_CMD diff.unity.cachetextconv true
 
 # Configure merge driver
 echo "Configuring merge driver..."
-$GIT_CONFIG_CMD merge.unity.name "Unity YAML Merge (prefab-tool)"
-$GIT_CONFIG_CMD merge.unity.driver "prefab-tool merge %O %A %B -o %A --path %P"
+$GIT_CONFIG_CMD merge.unity.name "Unity YAML Merge (unityflow)"
+$GIT_CONFIG_CMD merge.unity.driver "unityflow merge %O %A %B -o %A --path %P"
 $GIT_CONFIG_CMD merge.unity.recursive binary
 
 echo
@@ -132,7 +132,7 @@ if [ "$SCOPE" = "local" ]; then
         else
             echo "Adding Unity file patterns to .gitattributes..."
             echo "" >> "$GITATTRIBUTES"
-            echo "# Unity YAML files - use prefab-tool for diff and merge" >> "$GITATTRIBUTES"
+            echo "# Unity YAML files - use unityflow for diff and merge" >> "$GITATTRIBUTES"
             echo "*.prefab diff=unity merge=unity text eol=lf" >> "$GITATTRIBUTES"
             echo "*.unity diff=unity merge=unity text eol=lf" >> "$GITATTRIBUTES"
             echo "*.asset diff=unity merge=unity text eol=lf" >> "$GITATTRIBUTES"
@@ -140,7 +140,7 @@ if [ "$SCOPE" = "local" ]; then
     else
         echo "Creating .gitattributes..."
         cat > "$GITATTRIBUTES" << 'EOF'
-# Unity YAML files - use prefab-tool for diff and merge
+# Unity YAML files - use unityflow for diff and merge
 *.prefab diff=unity merge=unity text eol=lf
 *.unity diff=unity merge=unity text eol=lf
 *.asset diff=unity merge=unity text eol=lf
@@ -157,7 +157,7 @@ fi
 echo
 echo "=== Setup Complete ==="
 echo
-echo "Git is now configured to use prefab-tool for Unity files."
+echo "Git is now configured to use unityflow for Unity files."
 echo
 echo "Benefits:"
 echo "  - git diff shows meaningful changes (no serialization noise)"

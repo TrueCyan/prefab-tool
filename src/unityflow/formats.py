@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject, CLASS_IDS
+from unityflow.parser import UnityYAMLDocument, UnityYAMLObject, CLASS_IDS
 
 
 # =============================================================================
@@ -979,7 +979,7 @@ def import_from_json(
 
     # Apply automatic fixes if requested
     if auto_fix:
-        from prefab_tool.validator import fix_document
+        from unityflow.validator import fix_document
         fix_document(doc)
 
     return doc

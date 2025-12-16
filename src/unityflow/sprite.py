@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from prefab_tool.asset_tracker import META_GUID_PATTERN
+from unityflow.asset_tracker import META_GUID_PATTERN
 
 
 # Well-known material GUIDs

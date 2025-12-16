@@ -10,8 +10,8 @@
 
 import json
 from pathlib import Path
-from prefab_tool.parser import UnityYAMLDocument, CLASS_IDS
-from prefab_tool.formats import export_to_json, get_summary
+from unityflow.parser import UnityYAMLDocument, CLASS_IDS
+from unityflow.formats import export_to_json, get_summary
 
 
 def analyze_prefab(file_path: str, output_format: str = "text") -> None:

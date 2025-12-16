@@ -1,4 +1,4 @@
-"""Command-line interface for prefab-tool.
+"""Command-line interface for unityflow.
 
 Provides commands for normalizing, diffing, and validating Unity YAML files.
 """
@@ -12,18 +12,18 @@ from typing import Callable
 
 import click
 
-from prefab_tool import __version__
-from prefab_tool.diff import DiffFormat, PrefabDiff
-from prefab_tool.git_utils import (
+from unityflow import __version__
+from unityflow.diff import DiffFormat, PrefabDiff
+from unityflow.git_utils import (
     UNITY_EXTENSIONS,
     get_changed_files,
     get_files_changed_since,
     get_repo_root,
     is_git_repository,
 )
-from prefab_tool.normalizer import UnityPrefabNormalizer
-from prefab_tool.validator import PrefabValidator
-from prefab_tool.asset_tracker import (
+from unityflow.normalizer import UnityPrefabNormalizer
+from unityflow.validator import PrefabValidator
+from unityflow.asset_tracker import (
     analyze_dependencies,
     find_references_to_asset,
     find_unity_project_root,
@@ -84,7 +84,7 @@ def create_progress_bar(
 
 
 @click.group()
-@click.version_option(version=__version__, prog_name="prefab-tool")
+@click.version_option(version=__version__, prog_name="unityflow")
 def main() -> None:
     """Unity YAML Deterministic Serializer.
 
@@ -228,46 +228,46 @@ def normalize(
     Examples:
 
         # Normalize in place
-        prefab-tool normalize Player.prefab
-        prefab-tool normalize MainScene.unity
-        prefab-tool normalize GameConfig.asset
+        unityflow normalize Player.prefab
+        unityflow normalize MainScene.unity
+        unityflow normalize GameConfig.asset
 
         # Normalize multiple files
-        prefab-tool normalize *.prefab *.unity *.asset
+        unityflow normalize *.prefab *.unity *.asset
 
         # Normalize to a new file
-        prefab-tool normalize Player.prefab -o Player.normalized.prefab
+        unityflow normalize Player.prefab -o Player.normalized.prefab
 
         # Output to stdout
-        prefab-tool normalize Player.prefab --stdout
+        unityflow normalize Player.prefab --stdout
 
     Incremental normalization (requires git):
 
         # Normalize changed files only
-        prefab-tool normalize --changed-only
+        unityflow normalize --changed-only
 
         # Normalize staged files only
-        prefab-tool normalize --changed-only --staged-only
+        unityflow normalize --changed-only --staged-only
 
         # Normalize files changed since a commit
-        prefab-tool normalize --since HEAD~5
+        unityflow normalize --since HEAD~5
 
         # Normalize files changed since a branch
-        prefab-tool normalize --since main
+        unityflow normalize --since main
 
         # Filter by pattern
-        prefab-tool normalize --changed-only --pattern "Assets/**/*.unity"
+        unityflow normalize --changed-only --pattern "Assets/**/*.unity"
 
         # Dry run to see what would be normalized
-        prefab-tool normalize --changed-only --dry-run
+        unityflow normalize --changed-only --dry-run
 
     Script-based field ordering (enabled by default):
 
         # Disable field reordering
-        prefab-tool normalize Player.prefab --no-reorder-fields
+        unityflow normalize Player.prefab --no-reorder-fields
 
         # With explicit project root for script resolution
-        prefab-tool normalize Player.prefab --project-root /path/to/unity/project
+        unityflow normalize Player.prefab --project-root /path/to/unity/project
     """
     # Collect files to normalize
     files_to_normalize: list[Path] = []
@@ -479,13 +479,13 @@ def diff(
     Examples:
 
         # Compare two prefabs
-        prefab-tool diff old.prefab new.prefab
+        unityflow diff old.prefab new.prefab
 
         # Show raw diff without normalization
-        prefab-tool diff old.prefab new.prefab --no-normalize
+        unityflow diff old.prefab new.prefab --no-normalize
 
         # Exit with status code (for scripts)
-        prefab-tool diff old.prefab new.prefab --exit-code
+        unityflow diff old.prefab new.prefab --exit-code
     """
     format_map = {
         "unified": DiffFormat.UNIFIED,
@@ -552,15 +552,15 @@ def validate(
     Examples:
 
         # Validate a single file
-        prefab-tool validate Player.prefab
-        prefab-tool validate MainScene.unity
-        prefab-tool validate GameConfig.asset
+        unityflow validate Player.prefab
+        unityflow validate MainScene.unity
+        unityflow validate GameConfig.asset
 
         # Validate multiple files
-        prefab-tool validate *.prefab *.unity *.asset
+        unityflow validate *.prefab *.unity *.asset
 
         # Strict validation (warnings are errors)
-        prefab-tool validate Player.prefab --strict
+        unityflow validate Player.prefab --strict
     """
     validator = PrefabValidator(strict=strict)
     any_invalid = False
@@ -655,28 +655,28 @@ def query(
     Examples:
 
         # List all GameObjects
-        prefab-tool query Player.prefab --path "gameObjects/*/name"
+        unityflow query Player.prefab --path "gameObjects/*/name"
 
         # Get all component types as JSON
-        prefab-tool query Player.prefab --path "components/*/type" --format json
+        unityflow query Player.prefab --path "components/*/type" --format json
 
         # Show summary (no path)
-        prefab-tool query Player.prefab
+        unityflow query Player.prefab
 
         # Find GameObjects by name (supports wildcards)
-        prefab-tool query Scene.unity --find-name "Player*"
-        prefab-tool query Scene.unity --find-name "*Enemy*"
+        unityflow query Scene.unity --find-name "Player*"
+        unityflow query Scene.unity --find-name "*Enemy*"
 
         # Find GameObjects with specific component
-        prefab-tool query Scene.unity --find-component "Light2D"
-        prefab-tool query Scene.unity --find-component "SpriteRenderer"
+        unityflow query Scene.unity --find-component "Light2D"
+        unityflow query Scene.unity --find-component "SpriteRenderer"
 
         # Find GameObjects with MonoBehaviour by script GUID
-        prefab-tool query Scene.unity --find-script "abc123def456..."
+        unityflow query Scene.unity --find-script "abc123def456..."
     """
-    from prefab_tool.parser import UnityYAMLDocument, CLASS_IDS
-    from prefab_tool.query import query_path as do_query
-    from prefab_tool.formats import get_summary
+    from unityflow.parser import UnityYAMLDocument, CLASS_IDS
+    from unityflow.query import query_path as do_query
+    from unityflow.formats import get_summary
     import json
     import fnmatch
 
@@ -813,7 +813,7 @@ def _find_by_name(doc: "UnityYAMLDocument", pattern: str) -> list[dict]:
 
 def _find_by_component(doc: "UnityYAMLDocument", component_type: str) -> list[dict]:
     """Find GameObjects with a specific component type."""
-    from prefab_tool.parser import CLASS_IDS
+    from unityflow.parser import CLASS_IDS
 
     results = []
 
@@ -960,21 +960,21 @@ def export(
     Examples:
 
         # Export prefab to JSON
-        prefab-tool export Player.prefab -o player.json
+        unityflow export Player.prefab -o player.json
 
         # Export scene to JSON
-        prefab-tool export MainScene.unity -o scene.json
+        unityflow export MainScene.unity -o scene.json
 
         # Export ScriptableObject to JSON
-        prefab-tool export GameConfig.asset -o config.json
+        unityflow export GameConfig.asset -o config.json
 
         # Export to stdout
-        prefab-tool export Player.prefab
+        unityflow export Player.prefab
 
         # Compact output without raw fields
-        prefab-tool export Player.prefab --no-raw --indent 0
+        unityflow export Player.prefab --no-raw --indent 0
     """
-    from prefab_tool.formats import export_file_to_json
+    from unityflow.formats import export_file_to_json
 
     try:
         json_str = export_file_to_json(
@@ -1014,20 +1014,20 @@ def import_json(
     Examples:
 
         # Import JSON to prefab
-        prefab-tool import player.json -o Player.prefab
+        unityflow import player.json -o Player.prefab
 
         # Import JSON to scene
-        prefab-tool import scene.json -o MainScene.unity
+        unityflow import scene.json -o MainScene.unity
 
         # Import JSON to ScriptableObject
-        prefab-tool import config.json -o GameConfig.asset
+        unityflow import config.json -o GameConfig.asset
 
         # Round-trip workflow
-        prefab-tool export Player.prefab -o player.json
+        unityflow export Player.prefab -o player.json
         # ... edit player.json ...
-        prefab-tool import player.json -o Player.prefab
+        unityflow import player.json -o Player.prefab
     """
-    from prefab_tool.formats import import_file_from_json
+    from unityflow.formats import import_file_from_json
 
     try:
         doc = import_file_from_json(file, output_path=output)
@@ -1123,29 +1123,29 @@ def set_value_cmd(
     Examples:
 
         # Set position
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "components/12345/localPosition" \\
             --value '{"x": 0, "y": 5, "z": 0}'
 
         # Set a simple value
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "gameObjects/12345/name" \\
             --value '"NewName"'
 
         # Save to a new file
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "components/12345/localScale" \\
             --value '{"x": 2, "y": 2, "z": 2}' \\
             -o Player_modified.prefab
 
         # Create a new field if it doesn't exist
-        prefab-tool set Scene.unity \\
+        unityflow set Scene.unity \\
             --path "components/495733805/portalAPrefab" \\
             --value '{"fileID": 123, "guid": "abc", "type": 3}' \\
             --create
 
         # Set multiple fields at once (batch mode)
-        prefab-tool set Scene.unity \\
+        unityflow set Scene.unity \\
             --path "components/495733805" \\
             --batch '{
                 "portalAPrefab": {"fileID": 123, "guid": "abc", "type": 3},
@@ -1154,24 +1154,24 @@ def set_value_cmd(
             --create
 
         # Set sprite with auto fileID detection (Single mode)
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "components/12345/m_Sprite" \\
             --sprite "Assets/Sprites/player.png"
 
         # Set sprite with sub-sprite (Multiple mode / atlas)
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "components/12345/m_Sprite" \\
             --sprite "Assets/Sprites/atlas.png" \\
             --sub-sprite "player_idle_0"
 
         # Set sprite with URP material
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "components/12345/m_Sprite" \\
             --sprite "Assets/Sprites/player.png" \\
             --use-urp-default
 
         # Set sprite with custom material
-        prefab-tool set Player.prefab \\
+        unityflow set Player.prefab \\
             --path "components/12345/m_Sprite" \\
             --sprite "Assets/Sprites/player.png" \\
             --material "Assets/Materials/Custom.mat"
@@ -1183,9 +1183,9 @@ def set_value_cmd(
         For --sprite mode, the fileID is automatically detected from the
         sprite's .meta file based on import mode (Single vs Multiple).
     """
-    from prefab_tool.parser import UnityYAMLDocument
-    from prefab_tool.query import set_value, merge_values
-    from prefab_tool.sprite import (
+    from unityflow.parser import UnityYAMLDocument
+    from unityflow.query import set_value, merge_values
+    from unityflow.sprite import (
         get_sprite_reference,
         get_sprite_info,
         get_material_reference,
@@ -1336,7 +1336,7 @@ def git_textconv(file: Path) -> None:
     Setup in .gitconfig:
 
         [diff "unity"]
-            textconv = prefab-tool git-textconv
+            textconv = unityflow git-textconv
 
     Setup in .gitattributes:
 
@@ -1392,30 +1392,30 @@ def difftool(
     Setup as git difftool:
 
         git config diff.tool prefab-unity
-        git config difftool.prefab-unity.cmd 'prefab-tool difftool "$LOCAL" "$REMOTE"'
+        git config difftool.prefab-unity.cmd 'unityflow difftool "$LOCAL" "$REMOTE"'
 
-    Or use 'prefab-tool setup --with-difftool' for automatic configuration.
+    Or use 'unityflow setup --with-difftool' for automatic configuration.
 
     Git Fork setup:
 
         1. Open Git Fork → Settings → Integration
         2. Set External Diff Tool to: Custom
-        3. Path: prefab-tool
+        3. Path: unityflow
         4. Arguments: difftool "$LOCAL" "$REMOTE"
 
     Examples:
 
         # Compare with auto-detected tool
-        prefab-tool difftool old.prefab new.prefab
+        unityflow difftool old.prefab new.prefab
 
         # Use VS Code
-        prefab-tool difftool old.prefab new.prefab --tool vscode
+        unityflow difftool old.prefab new.prefab --tool vscode
 
         # Open HTML diff in browser
-        prefab-tool difftool old.prefab new.prefab --tool html
+        unityflow difftool old.prefab new.prefab --tool html
 
         # Compare without normalization
-        prefab-tool difftool old.prefab new.prefab --no-normalize
+        unityflow difftool old.prefab new.prefab --no-normalize
     """
     import shutil
     import subprocess
@@ -1716,13 +1716,13 @@ def install_hooks(
     Examples:
 
         # Install using pre-commit framework
-        prefab-tool install-hooks --pre-commit
+        unityflow install-hooks --pre-commit
 
         # Install native git hook
-        prefab-tool install-hooks --git-hooks
+        unityflow install-hooks --git-hooks
 
         # Overwrite existing hooks
-        prefab-tool install-hooks --git-hooks --force
+        unityflow install-hooks --git-hooks --force
     """
     import subprocess
 
@@ -1755,18 +1755,18 @@ def install_hooks(
         config_path = repo_root / ".pre-commit-config.yaml"
         if config_path.exists() and not force:
             content = config_path.read_text()
-            if "prefab-tool" in content:
-                click.echo("prefab-tool hook already configured in .pre-commit-config.yaml")
+            if "unityflow" in content:
+                click.echo("unityflow hook already configured in .pre-commit-config.yaml")
                 return
             click.echo("Found existing .pre-commit-config.yaml")
-            click.echo("Add prefab-tool manually or use --force to overwrite")
+            click.echo("Add unityflow manually or use --force to overwrite")
             sys.exit(1)
 
         config_content = """\
 # See https://pre-commit.com for more information
 repos:
   # Unity Prefab Normalizer
-  - repo: https://github.com/TrueCyan/prefab-tool
+  - repo: https://github.com/TrueCyan/unityflow
     rev: v0.1.0
     hooks:
       - id: prefab-normalize
@@ -1798,7 +1798,7 @@ repos:
 
         hook_content = """\
 #!/bin/bash
-# prefab-tool pre-commit hook
+# unityflow pre-commit hook
 # Automatically normalize Unity YAML files before commit
 
 set -e
@@ -1812,7 +1812,7 @@ if [ -n "$STAGED_FILES" ]; then
     # Normalize each staged file
     for file in $STAGED_FILES; do
         if [ -f "$file" ]; then
-            prefab-tool normalize "$file" --in-place
+            unityflow normalize "$file" --in-place
             git add "$file"
         fi
     done
@@ -1866,7 +1866,7 @@ def merge_files(
 
         [merge "unity"]
             name = Unity YAML Merge
-            driver = prefab-tool merge %O %A %B -o %A --path %P
+            driver = unityflow merge %O %A %B -o %A --path %P
 
     Setup in .gitattributes:
 
@@ -1874,7 +1874,7 @@ def merge_files(
         *.unity merge=unity
         *.asset merge=unity
     """
-    from prefab_tool.merge import three_way_merge
+    from unityflow.merge import three_way_merge
 
     normalizer = UnityPrefabNormalizer()
 
@@ -1923,15 +1923,15 @@ def stats(
     Examples:
 
         # Show stats for a single file
-        prefab-tool stats Boss.unity
+        unityflow stats Boss.unity
 
         # Show stats for multiple files
-        prefab-tool stats *.prefab
+        unityflow stats *.prefab
 
         # Output as JSON
-        prefab-tool stats Boss.unity --format json
+        unityflow stats Boss.unity --format json
     """
-    from prefab_tool.parser import UnityYAMLDocument, CLASS_IDS
+    from unityflow.parser import UnityYAMLDocument, CLASS_IDS
     import json
 
     all_stats = []
@@ -2019,22 +2019,22 @@ def deps(
     Examples:
 
         # Show all dependencies
-        prefab-tool deps Player.prefab
+        unityflow deps Player.prefab
 
         # Show only binary assets (textures, meshes, audio)
-        prefab-tool deps Player.prefab --binary-only
+        unityflow deps Player.prefab --binary-only
 
         # Show only unresolved (missing) dependencies
-        prefab-tool deps Player.prefab --unresolved-only
+        unityflow deps Player.prefab --unresolved-only
 
         # Filter by type
-        prefab-tool deps Player.prefab --type Texture
+        unityflow deps Player.prefab --type Texture
 
         # Output as JSON
-        prefab-tool deps Player.prefab --format json
+        unityflow deps Player.prefab --format json
 
         # Analyze multiple files
-        prefab-tool deps *.prefab
+        unityflow deps *.prefab
     """
     import json
 
@@ -2159,16 +2159,16 @@ def find_refs(
     Examples:
 
         # Find all files referencing a texture
-        prefab-tool find-refs Textures/player.png
+        unityflow find-refs Textures/player.png
 
         # Search in specific directories
-        prefab-tool find-refs Textures/player.png --search-path Assets/Prefabs
+        unityflow find-refs Textures/player.png --search-path Assets/Prefabs
 
         # Output as JSON
-        prefab-tool find-refs Textures/player.png --format json
+        unityflow find-refs Textures/player.png --format json
 
         # Show progress
-        prefab-tool find-refs Textures/player.png --progress
+        unityflow find-refs Textures/player.png --progress
     """
     import json
 
@@ -2316,21 +2316,21 @@ def scan_scripts(
     Examples:
 
         # Scan a single file
-        prefab-tool scan-scripts Player.prefab
+        unityflow scan-scripts Player.prefab
 
         # Scan a directory recursively
-        prefab-tool scan-scripts Assets/Prefabs -r
+        unityflow scan-scripts Assets/Prefabs -r
 
         # Show property keys (to understand component structure)
-        prefab-tool scan-scripts Scene.unity --show-properties
+        unityflow scan-scripts Scene.unity --show-properties
 
         # Group by GUID to see all usages
-        prefab-tool scan-scripts Assets/ -r --group-by-guid
+        unityflow scan-scripts Assets/ -r --group-by-guid
 
         # Output as JSON for further processing
-        prefab-tool scan-scripts *.prefab --format json
+        unityflow scan-scripts *.prefab --format json
     """
-    from prefab_tool.parser import UnityYAMLDocument
+    from unityflow.parser import UnityYAMLDocument
     import json
 
     # Collect files to scan
@@ -2558,19 +2558,19 @@ def scan_meta(
     Examples:
 
         # Scan URP package for scripts
-        prefab-tool scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --scripts-only
+        unityflow scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --scripts-only
 
         # Find Light-related scripts
-        prefab-tool scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --filter Light
+        unityflow scan-meta "Library/PackageCache/com.unity.render-pipelines.universal@*" -r --filter Light
 
         # Scan TextMeshPro package
-        prefab-tool scan-meta "Library/PackageCache/com.unity.textmeshpro@*" -r --scripts-only
+        unityflow scan-meta "Library/PackageCache/com.unity.textmeshpro@*" -r --scripts-only
 
         # Scan local Assets folder
-        prefab-tool scan-meta Assets/Scripts -r
+        unityflow scan-meta Assets/Scripts -r
 
         # Output as JSON
-        prefab-tool scan-meta "Library/PackageCache/com.unity.cinemachine@*" -r --scripts-only --format json
+        unityflow scan-meta "Library/PackageCache/com.unity.cinemachine@*" -r --scripts-only --format json
     """
     import re
     import json
@@ -2737,12 +2737,12 @@ def parse_script_cmd(
     Examples:
 
         # Parse a script and show field order
-        prefab-tool parse-script Assets/Scripts/Player.cs
+        unityflow parse-script Assets/Scripts/Player.cs
 
         # Output as JSON
-        prefab-tool parse-script Assets/Scripts/Player.cs --format json
+        unityflow parse-script Assets/Scripts/Player.cs --format json
     """
-    from prefab_tool.script_parser import parse_script_file
+    from unityflow.script_parser import parse_script_file
     import json
 
     info = parse_script_file(script_path)
@@ -2849,26 +2849,26 @@ def setup(
     Examples:
 
         # Basic setup (local to current repo)
-        prefab-tool setup
+        unityflow setup
 
         # Global setup (applies to all repos)
-        prefab-tool setup --global
+        unityflow setup --global
 
         # Setup with pre-commit hooks
-        prefab-tool setup --with-hooks
+        unityflow setup --with-hooks
 
         # Setup with pre-commit framework
-        prefab-tool setup --with-pre-commit
+        unityflow setup --with-pre-commit
 
         # Setup with difftool for Git Fork
-        prefab-tool setup --with-difftool
+        unityflow setup --with-difftool
 
         # Setup difftool with specific backend
-        prefab-tool setup --with-difftool --difftool-backend vscode
+        unityflow setup --with-difftool --difftool-backend vscode
     """
     import subprocess
 
-    click.echo("=== prefab-tool Git Integration Setup ===")
+    click.echo("=== unityflow Git Integration Setup ===")
     click.echo()
 
     # Check if we're in a git repo (required for local setup)
@@ -2889,13 +2889,13 @@ def setup(
 
     # Configure diff driver
     click.echo("  Configuring diff driver...")
-    subprocess.run([*git_config_cmd, "diff.unity.textconv", "prefab-tool git-textconv"], check=True)
+    subprocess.run([*git_config_cmd, "diff.unity.textconv", "unityflow git-textconv"], check=True)
     subprocess.run([*git_config_cmd, "diff.unity.cachetextconv", "true"], check=True)
 
     # Configure merge driver
     click.echo("  Configuring merge driver...")
-    subprocess.run([*git_config_cmd, "merge.unity.name", "Unity YAML Merge (prefab-tool)"], check=True)
-    subprocess.run([*git_config_cmd, "merge.unity.driver", "prefab-tool merge %O %A %B -o %A --path %P"], check=True)
+    subprocess.run([*git_config_cmd, "merge.unity.name", "Unity YAML Merge (unityflow)"], check=True)
+    subprocess.run([*git_config_cmd, "merge.unity.driver", "unityflow merge %O %A %B -o %A --path %P"], check=True)
     subprocess.run([*git_config_cmd, "merge.unity.recursive", "binary"], check=True)
 
     # Configure difftool (for Git Fork and other GUI clients)
@@ -2911,7 +2911,7 @@ def setup(
         # Set up difftool
         subprocess.run([*git_config_cmd, "diff.tool", "prefab-unity"], check=True)
         subprocess.run(
-            [*git_config_cmd, "difftool.prefab-unity.cmd", f'prefab-tool difftool{backend_arg} "$LOCAL" "$REMOTE"'],
+            [*git_config_cmd, "difftool.prefab-unity.cmd", f'unityflow difftool{backend_arg} "$LOCAL" "$REMOTE"'],
             check=True,
         )
 
@@ -2931,7 +2931,7 @@ def setup(
     if not use_global and repo_root:
         gitattributes_path = repo_root / ".gitattributes"
         gitattributes_content = """\
-# Unity YAML files - use prefab-tool for diff and merge
+# Unity YAML files - use unityflow for diff and merge
 *.prefab diff=unity merge=unity text eol=lf
 *.unity diff=unity merge=unity text eol=lf
 *.asset diff=unity merge=unity text eol=lf
@@ -2986,7 +2986,7 @@ def setup(
         else:
             hook_content = """\
 #!/bin/bash
-# prefab-tool pre-commit hook
+# unityflow pre-commit hook
 # Automatically normalize Unity YAML files before commit
 
 set -e
@@ -2999,7 +2999,7 @@ if [ -n "$STAGED_FILES" ]; then
 
     for file in $STAGED_FILES; do
         if [ -f "$file" ]; then
-            prefab-tool normalize "$file" --in-place
+            unityflow normalize "$file" --in-place
             git add "$file"
         fi
     done
@@ -3028,7 +3028,7 @@ fi
 # See https://pre-commit.com for more information
 repos:
   # Unity Prefab Normalizer
-  - repo: https://github.com/TrueCyan/prefab-tool
+  - repo: https://github.com/TrueCyan/unityflow
     rev: v0.1.0
     hooks:
       - id: prefab-normalize
@@ -3037,8 +3037,8 @@ repos:
 
         if config_path.exists() and not force:
             existing = config_path.read_text()
-            if "prefab-tool" in existing:
-                click.echo("  pre-commit already configured for prefab-tool")
+            if "unityflow" in existing:
+                click.echo("  pre-commit already configured for unityflow")
             else:
                 click.echo("  Warning: .pre-commit-config.yaml exists", err=True)
                 click.echo("  Use --force to overwrite", err=True)
@@ -3055,7 +3055,7 @@ repos:
     click.echo()
     click.echo("=== Setup Complete ===")
     click.echo()
-    click.echo("Git is now configured to use prefab-tool for Unity files.")
+    click.echo("Git is now configured to use unityflow for Unity files.")
     click.echo()
     click.echo("Test with:")
     click.echo("  git diff HEAD~1 -- '*.prefab'")
@@ -3083,12 +3083,12 @@ def sprite_info_cmd(
     Examples:
 
         # Show sprite info
-        prefab-tool sprite-info Assets/Sprites/player.png
+        unityflow sprite-info Assets/Sprites/player.png
 
         # Output as JSON
-        prefab-tool sprite-info Assets/Sprites/atlas.png --format json
+        unityflow sprite-info Assets/Sprites/atlas.png --format json
     """
-    from prefab_tool.sprite import get_sprite_info, SPRITE_SINGLE_MODE_FILE_ID
+    from unityflow.sprite import get_sprite_info, SPRITE_SINGLE_MODE_FILE_ID
     import json
 
     info = get_sprite_info(sprite)
@@ -3121,7 +3121,7 @@ def sprite_info_cmd(
             click.echo(f"Reference fileID: {SPRITE_SINGLE_MODE_FILE_ID}")
             click.echo()
             click.echo("Usage:")
-            click.echo(f"  prefab-tool sprite-link <prefab> -c <component_id> -s \"{sprite}\"")
+            click.echo(f"  unityflow sprite-link <prefab> -c <component_id> -s \"{sprite}\"")
         else:
             click.echo(f"Sub-sprites ({len(info.sprites)}):")
             for s in info.sprites:
@@ -3131,7 +3131,7 @@ def sprite_info_cmd(
                 first_sprite = info.sprites[0]
                 click.echo()
                 click.echo("Usage (first sub-sprite):")
-                click.echo(f"  prefab-tool sprite-link <prefab> -c <component_id> -s \"{sprite}\" --sub-sprite \"{first_sprite['name']}\"")
+                click.echo(f"  unityflow sprite-link <prefab> -c <component_id> -s \"{sprite}\" --sub-sprite \"{first_sprite['name']}\"")
 
 
 @main.command(name="add-object")
@@ -3198,21 +3198,21 @@ def add_object(
     Examples:
 
         # Add a new GameObject at root
-        prefab-tool add-object Scene.unity --name "Player"
+        unityflow add-object Scene.unity --name "Player"
 
         # Add with parent
-        prefab-tool add-object Scene.unity --name "Child" --parent 12345
+        unityflow add-object Scene.unity --name "Child" --parent 12345
 
         # Add with position
-        prefab-tool add-object Scene.unity --name "Enemy" --position "10,0,5"
+        unityflow add-object Scene.unity --name "Enemy" --position "10,0,5"
 
         # Add UI GameObject (RectTransform)
-        prefab-tool add-object Scene.unity --name "Button" --ui --parent 67890
+        unityflow add-object Scene.unity --name "Button" --ui --parent 67890
 
         # Add with layer and tag
-        prefab-tool add-object Scene.unity --name "Enemy" --layer 8 --tag "Enemy"
+        unityflow add-object Scene.unity --name "Enemy" --layer 8 --tag "Enemy"
     """
-    from prefab_tool.parser import (
+    from unityflow.parser import (
         UnityYAMLDocument,
         create_game_object,
         create_transform,
@@ -3342,19 +3342,19 @@ def add_component(
     Examples:
 
         # Add a built-in component
-        prefab-tool add-component Scene.unity --to 12345 --type SpriteRenderer
+        unityflow add-component Scene.unity --to 12345 --type SpriteRenderer
 
         # Add a MonoBehaviour
-        prefab-tool add-component Scene.unity --to 12345 --script "abc123def456..."
+        unityflow add-component Scene.unity --to 12345 --script "abc123def456..."
 
         # Add with properties
-        prefab-tool add-component Scene.unity --to 12345 --script "abc123..." \\
+        unityflow add-component Scene.unity --to 12345 --script "abc123..." \\
             --props '{"speed": 5.0, "health": 100}'
 
         # Add Camera component
-        prefab-tool add-component Scene.unity --to 12345 --type Camera
+        unityflow add-component Scene.unity --to 12345 --type Camera
     """
-    from prefab_tool.parser import (
+    from unityflow.parser import (
         UnityYAMLDocument,
         create_mono_behaviour,
     )
@@ -3440,7 +3440,7 @@ def _create_builtin_component(
     properties: dict | None = None,
 ) -> "UnityYAMLObject":
     """Create a built-in Unity component."""
-    from prefab_tool.parser import UnityYAMLObject
+    from unityflow.parser import UnityYAMLObject
 
     # Class ID mapping for built-in components
     class_ids = {
@@ -3615,15 +3615,15 @@ def delete_object(
     Examples:
 
         # Delete a GameObject (keeps children)
-        prefab-tool delete-object Scene.unity --id 12345
+        unityflow delete-object Scene.unity --id 12345
 
         # Delete a GameObject and all its children
-        prefab-tool delete-object Scene.unity --id 12345 --cascade
+        unityflow delete-object Scene.unity --id 12345 --cascade
 
         # Delete without confirmation
-        prefab-tool delete-object Scene.unity --id 12345 --force
+        unityflow delete-object Scene.unity --id 12345 --force
     """
-    from prefab_tool.parser import UnityYAMLDocument
+    from unityflow.parser import UnityYAMLDocument
 
     try:
         doc = UnityYAMLDocument.load(file)
@@ -3733,12 +3733,12 @@ def delete_component(
     Examples:
 
         # Delete a component
-        prefab-tool delete-component Scene.unity --id 67890
+        unityflow delete-component Scene.unity --id 67890
 
         # Delete without confirmation
-        prefab-tool delete-component Scene.unity --id 67890 --force
+        unityflow delete-component Scene.unity --id 67890 --force
     """
-    from prefab_tool.parser import UnityYAMLDocument
+    from unityflow.parser import UnityYAMLDocument
 
     try:
         doc = UnityYAMLDocument.load(file)
@@ -3896,21 +3896,21 @@ def clone_object(
     Examples:
 
         # Simple clone (shallow)
-        prefab-tool clone-object Scene.unity --id 12345
+        unityflow clone-object Scene.unity --id 12345
 
         # Clone with new name
-        prefab-tool clone-object Scene.unity --id 12345 --name "Player2"
+        unityflow clone-object Scene.unity --id 12345 --name "Player2"
 
         # Clone to different parent
-        prefab-tool clone-object Scene.unity --id 12345 --parent 67890
+        unityflow clone-object Scene.unity --id 12345 --parent 67890
 
         # Clone with position offset
-        prefab-tool clone-object Scene.unity --id 12345 --position "5,0,0"
+        unityflow clone-object Scene.unity --id 12345 --position "5,0,0"
 
         # Deep clone (include children)
-        prefab-tool clone-object Scene.unity --id 12345 --deep
+        unityflow clone-object Scene.unity --id 12345 --deep
     """
-    from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject
+    from unityflow.parser import UnityYAMLDocument, UnityYAMLObject
     import copy
 
     try:
