@@ -1410,6 +1410,13 @@ def set_value_cmd(
             click.echo("Error: --batch value must be a JSON object", err=True)
             sys.exit(1)
 
+        # Validate field types in batch values
+        for batch_field_name, batch_value in parsed_values.items():
+            is_valid, error_msg = _validate_field_value(batch_field_name, batch_value)
+            if not is_valid:
+                click.echo(f"Error: {error_msg}", err=True)
+                sys.exit(1)
+
         # Resolve asset references in batch values (keys are used as field names)
         try:
             resolved_values = resolve_value(parsed_values, project_root)
@@ -1436,6 +1443,12 @@ def set_value_cmd(
             parsed_value = json.loads(value)
         except json.JSONDecodeError:
             parsed_value = value
+
+        # Validate field type
+        is_valid, error_msg = _validate_field_value(field_name, parsed_value)
+        if not is_valid:
+            click.echo(f"Error: {error_msg}", err=True)
+            sys.exit(1)
 
         # Resolve asset references with field name for type validation
         try:
@@ -3460,6 +3473,229 @@ BUILTIN_COMPONENT_TYPES = [
 
 # All supported component types for --type option
 ALL_COMPONENT_TYPES = BUILTIN_COMPONENT_TYPES + list(PACKAGE_COMPONENT_GUIDS.keys())
+
+
+# ============================================================================
+# Field Type Validation
+# ============================================================================
+
+class FieldType:
+    """Unity field types for validation."""
+    VECTOR2 = "Vector2"      # {x, y}
+    VECTOR3 = "Vector3"      # {x, y, z}
+    VECTOR4 = "Vector4"      # {x, y, z, w}
+    QUATERNION = "Quaternion"  # {x, y, z, w}
+    COLOR = "Color"          # {r, g, b, a}
+    BOOL = "bool"            # 0 or 1
+    INT = "int"              # integer
+    FLOAT = "float"          # number
+    STRING = "string"        # string
+    ASSET_REF = "AssetRef"   # {fileID, guid, type}
+
+
+# Field name to type mapping
+FIELD_TYPES: dict[str, str] = {
+    # Transform / RectTransform - Vector3
+    "m_LocalPosition": FieldType.VECTOR3,
+    "m_LocalScale": FieldType.VECTOR3,
+    "m_LocalEulerAnglesHint": FieldType.VECTOR3,
+    "localPosition": FieldType.VECTOR3,
+    "localScale": FieldType.VECTOR3,
+
+    # Transform - Quaternion
+    "m_LocalRotation": FieldType.QUATERNION,
+    "localRotation": FieldType.QUATERNION,
+
+    # RectTransform - Vector2
+    "m_AnchorMin": FieldType.VECTOR2,
+    "m_AnchorMax": FieldType.VECTOR2,
+    "m_AnchoredPosition": FieldType.VECTOR2,
+    "m_SizeDelta": FieldType.VECTOR2,
+    "m_Pivot": FieldType.VECTOR2,
+    "anchorMin": FieldType.VECTOR2,
+    "anchorMax": FieldType.VECTOR2,
+    "anchoredPosition": FieldType.VECTOR2,
+    "sizeDelta": FieldType.VECTOR2,
+    "pivot": FieldType.VECTOR2,
+
+    # RectTransform - Vector4
+    "m_RaycastPadding": FieldType.VECTOR4,
+    "m_margin": FieldType.VECTOR4,
+    "m_maskOffset": FieldType.VECTOR4,
+
+    # Color fields
+    "m_Color": FieldType.COLOR,
+    "m_fontColor": FieldType.COLOR,
+    "color": FieldType.COLOR,
+
+    # Bool fields (0 or 1)
+    "m_IsActive": FieldType.BOOL,
+    "m_Enabled": FieldType.BOOL,
+    "m_RaycastTarget": FieldType.BOOL,
+    "m_Maskable": FieldType.BOOL,
+    "m_isRightToLeft": FieldType.BOOL,
+    "m_isRichText": FieldType.BOOL,
+    "m_isOrthographic": FieldType.BOOL,
+    "m_CullTransparentMesh": FieldType.BOOL,
+    "m_ShowMaskGraphic": FieldType.BOOL,
+    "m_FlipX": FieldType.BOOL,
+    "m_FlipY": FieldType.BOOL,
+    "m_ConstrainProportionsScale": FieldType.BOOL,
+    "isActive": FieldType.BOOL,
+    "enabled": FieldType.BOOL,
+
+    # Int fields
+    "m_Layer": FieldType.INT,
+    "m_SortingOrder": FieldType.INT,
+    "m_SortingLayerID": FieldType.INT,
+    "m_ObjectHideFlags": FieldType.INT,
+    "m_NavMeshLayer": FieldType.INT,
+    "m_StaticEditorFlags": FieldType.INT,
+    "m_HorizontalAlignment": FieldType.INT,
+    "m_VerticalAlignment": FieldType.INT,
+    "m_fontStyle": FieldType.INT,
+    "m_overflowMode": FieldType.INT,
+    "sortingOrder": FieldType.INT,
+    "layer": FieldType.INT,
+
+    # Float fields
+    "m_fontSize": FieldType.FLOAT,
+    "m_fontSizeBase": FieldType.FLOAT,
+    "m_fontSizeMin": FieldType.FLOAT,
+    "m_fontSizeMax": FieldType.FLOAT,
+    "m_characterSpacing": FieldType.FLOAT,
+    "m_wordSpacing": FieldType.FLOAT,
+    "m_lineSpacing": FieldType.FLOAT,
+    "m_paragraphSpacing": FieldType.FLOAT,
+    "m_FillAmount": FieldType.FLOAT,
+    "fontSize": FieldType.FLOAT,
+    "fillAmount": FieldType.FLOAT,
+
+    # String fields
+    "m_Name": FieldType.STRING,
+    "m_TagString": FieldType.STRING,
+    "m_text": FieldType.STRING,
+    "name": FieldType.STRING,
+    "text": FieldType.STRING,
+
+    # Asset reference fields
+    "m_Sprite": FieldType.ASSET_REF,
+    "m_Material": FieldType.ASSET_REF,
+    "m_Script": FieldType.ASSET_REF,
+    "m_fontAsset": FieldType.ASSET_REF,
+    "m_sharedMaterial": FieldType.ASSET_REF,
+    "sprite": FieldType.ASSET_REF,
+    "material": FieldType.ASSET_REF,
+}
+
+
+def _validate_field_value(field_name: str, value: any) -> tuple[bool, str | None]:
+    """Validate a value against its expected field type.
+
+    Args:
+        field_name: The field name (e.g., "m_LocalPosition")
+        value: The value to validate
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is None.
+    """
+    field_type = FIELD_TYPES.get(field_name)
+
+    if field_type is None:
+        # Unknown field, skip validation
+        return True, None
+
+    if field_type == FieldType.VECTOR2:
+        if not isinstance(value, dict):
+            return False, f"'{field_name}'은(는) Vector2 형식이어야 합니다: {{\"x\": 0, \"y\": 0}}"
+        required = {"x", "y"}
+        if not required.issubset(value.keys()):
+            missing = required - set(value.keys())
+            return False, f"'{field_name}'에 필수 키가 없습니다: {missing}. 형식: {{\"x\": 0, \"y\": 0}}"
+        for k in ["x", "y"]:
+            if not isinstance(value.get(k), (int, float)):
+                return False, f"'{field_name}.{k}'는 숫자여야 합니다"
+        return True, None
+
+    if field_type == FieldType.VECTOR3:
+        if not isinstance(value, dict):
+            return False, f"'{field_name}'은(는) Vector3 형식이어야 합니다: {{\"x\": 0, \"y\": 0, \"z\": 0}}"
+        required = {"x", "y", "z"}
+        if not required.issubset(value.keys()):
+            missing = required - set(value.keys())
+            return False, f"'{field_name}'에 필수 키가 없습니다: {missing}. 형식: {{\"x\": 0, \"y\": 0, \"z\": 0}}"
+        for k in ["x", "y", "z"]:
+            if not isinstance(value.get(k), (int, float)):
+                return False, f"'{field_name}.{k}'는 숫자여야 합니다"
+        return True, None
+
+    if field_type == FieldType.VECTOR4:
+        if not isinstance(value, dict):
+            return False, f"'{field_name}'은(는) Vector4 형식이어야 합니다: {{\"x\": 0, \"y\": 0, \"z\": 0, \"w\": 0}}"
+        required = {"x", "y", "z", "w"}
+        if not required.issubset(value.keys()):
+            missing = required - set(value.keys())
+            return False, f"'{field_name}'에 필수 키가 없습니다: {missing}. 형식: {{\"x\": 0, \"y\": 0, \"z\": 0, \"w\": 0}}"
+        for k in ["x", "y", "z", "w"]:
+            if not isinstance(value.get(k), (int, float)):
+                return False, f"'{field_name}.{k}'는 숫자여야 합니다"
+        return True, None
+
+    if field_type == FieldType.QUATERNION:
+        if not isinstance(value, dict):
+            return False, f"'{field_name}'은(는) Quaternion 형식이어야 합니다: {{\"x\": 0, \"y\": 0, \"z\": 0, \"w\": 1}}"
+        required = {"x", "y", "z", "w"}
+        if not required.issubset(value.keys()):
+            missing = required - set(value.keys())
+            return False, f"'{field_name}'에 필수 키가 없습니다: {missing}. 형식: {{\"x\": 0, \"y\": 0, \"z\": 0, \"w\": 1}}"
+        for k in ["x", "y", "z", "w"]:
+            if not isinstance(value.get(k), (int, float)):
+                return False, f"'{field_name}.{k}'는 숫자여야 합니다"
+        return True, None
+
+    if field_type == FieldType.COLOR:
+        if not isinstance(value, dict):
+            return False, f"'{field_name}'은(는) Color 형식이어야 합니다: {{\"r\": 1, \"g\": 1, \"b\": 1, \"a\": 1}}"
+        required = {"r", "g", "b", "a"}
+        if not required.issubset(value.keys()):
+            missing = required - set(value.keys())
+            return False, f"'{field_name}'에 필수 키가 없습니다: {missing}. 형식: {{\"r\": 1, \"g\": 1, \"b\": 1, \"a\": 1}}"
+        for k in ["r", "g", "b", "a"]:
+            if not isinstance(value.get(k), (int, float)):
+                return False, f"'{field_name}.{k}'는 숫자여야 합니다"
+        return True, None
+
+    if field_type == FieldType.BOOL:
+        if value not in (0, 1, True, False):
+            return False, f"'{field_name}'은(는) bool 형식이어야 합니다: 0 또는 1"
+        return True, None
+
+    if field_type == FieldType.INT:
+        if not isinstance(value, int) or isinstance(value, bool):
+            return False, f"'{field_name}'은(는) 정수여야 합니다"
+        return True, None
+
+    if field_type == FieldType.FLOAT:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False, f"'{field_name}'은(는) 숫자여야 합니다"
+        return True, None
+
+    if field_type == FieldType.STRING:
+        if not isinstance(value, str):
+            return False, f"'{field_name}'은(는) 문자열이어야 합니다"
+        return True, None
+
+    if field_type == FieldType.ASSET_REF:
+        # Asset references are validated separately by asset_resolver
+        # Skip validation here if it's already a resolved reference
+        if isinstance(value, dict) and "fileID" in value:
+            return True, None
+        # If it's a string starting with @, it will be resolved later
+        if isinstance(value, str) and value.startswith("@"):
+            return True, None
+        return False, f"'{field_name}'은(는) 에셋 참조 형식이어야 합니다: \"@Assets/path/to/asset.ext\""
+
+    return True, None
 
 
 @main.command(name="add-component")
