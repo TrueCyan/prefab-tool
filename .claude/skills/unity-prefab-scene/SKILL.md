@@ -421,50 +421,6 @@ RectTransform 컴포넌트는 두 가지 형식으로 값을 제공합니다:
 
 ---
 
-## ScriptableObject 편집
-
-ScriptableObject(.asset) 파일도 Unity YAML 형식을 사용합니다.
-
-### YAML 구조
-
-```yaml
-%YAML 1.1
-%TAG !u! tag:unity3d.com,2011:
---- !u!114 &11400000
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: YOUR_SCRIPT_GUID, type: 3}
-  m_Name: AssetName
-  m_EditorClassIdentifier:
-  # 스크립트의 SerializeField 값들...
-  myField: value
-```
-
-**핵심 포인트:**
-- classId: `114` (MonoBehaviour)
-- fileID: `11400000` (ScriptableObject 표준)
-- `m_Script.guid`: ScriptableObject 스크립트의 GUID
-
-### .meta 파일 생성
-
-ScriptableObject 에셋을 생성할 때 반드시 `.meta` 파일도 함께 생성해야 합니다:
-
-```bash
-# CLI로 .meta 파일 자동 생성 (권장)
-unityflow generate-meta Assets/Data/GameConfig.asset
-
-# 결정론적 GUID가 필요한 경우
-unityflow generate-meta Assets/Data/GameConfig.asset --seed "GameConfig"
-```
-
----
-
 ## Python API (복잡한 경우)
 
 대부분의 작업은 CLI로 가능하지만, 복잡한 자동화가 필요한 경우 Python API를 사용합니다.
