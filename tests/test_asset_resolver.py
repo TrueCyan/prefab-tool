@@ -9,6 +9,11 @@ from unityflow.asset_resolver import (
     resolve_value,
     get_guid_from_meta,
     get_sprite_file_id,
+    get_expected_types_for_field,
+    get_asset_type_from_extension,
+    validate_asset_type_for_field,
+    AssetType,
+    AssetTypeMismatchError,
     ASSET_TYPE_FILE_IDS,
 )
 
@@ -323,3 +328,172 @@ class TestResolveAssetReferenceIntegration:
             "guid": "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1",
             "type": 3,
         }
+
+
+class TestAssetTypeFromExtension:
+    """Tests for get_asset_type_from_extension function."""
+
+    def test_sprite_extensions(self):
+        assert get_asset_type_from_extension(".png") == AssetType.SPRITE
+        assert get_asset_type_from_extension(".jpg") == AssetType.SPRITE
+        assert get_asset_type_from_extension("png") == AssetType.SPRITE
+
+    def test_audio_extensions(self):
+        assert get_asset_type_from_extension(".wav") == AssetType.AUDIO_CLIP
+        assert get_asset_type_from_extension(".mp3") == AssetType.AUDIO_CLIP
+
+    def test_prefab_extension(self):
+        assert get_asset_type_from_extension(".prefab") == AssetType.PREFAB
+
+    def test_script_extension(self):
+        assert get_asset_type_from_extension(".cs") == AssetType.SCRIPT
+
+    def test_unknown_extension(self):
+        assert get_asset_type_from_extension(".xyz") == AssetType.UNKNOWN
+
+
+class TestExpectedTypesForField:
+    """Tests for get_expected_types_for_field function."""
+
+    def test_sprite_fields(self):
+        assert AssetType.SPRITE in get_expected_types_for_field("m_Sprite")
+        assert AssetType.SPRITE in get_expected_types_for_field("playerSprite")
+        assert AssetType.SPRITE in get_expected_types_for_field("icon_sprite")
+
+    def test_audio_fields(self):
+        assert AssetType.AUDIO_CLIP in get_expected_types_for_field("audioClip")
+        assert AssetType.AUDIO_CLIP in get_expected_types_for_field("jumpSound")
+        assert AssetType.AUDIO_CLIP in get_expected_types_for_field("bgMusic")
+
+    def test_prefab_fields(self):
+        assert AssetType.PREFAB in get_expected_types_for_field("enemyPrefab")
+        assert AssetType.PREFAB in get_expected_types_for_field("playerPrefab")
+
+    def test_material_fields(self):
+        assert AssetType.MATERIAL in get_expected_types_for_field("m_Material")
+        assert AssetType.MATERIAL in get_expected_types_for_field("m_Materials")
+
+    def test_script_fields(self):
+        assert AssetType.SCRIPT in get_expected_types_for_field("m_Script")
+
+    def test_unknown_fields(self):
+        assert get_expected_types_for_field("someRandomField") is None
+        assert get_expected_types_for_field("health") is None
+
+
+class TestValidateAssetTypeForField:
+    """Tests for validate_asset_type_for_field function."""
+
+    def test_valid_sprite_for_sprite_field(self):
+        # Should not raise
+        validate_asset_type_for_field("m_Sprite", "Assets/icon.png", AssetType.SPRITE)
+
+    def test_valid_audio_for_audio_field(self):
+        # Should not raise
+        validate_asset_type_for_field("audioClip", "Assets/sound.wav", AssetType.AUDIO_CLIP)
+
+    def test_invalid_audio_for_sprite_field(self):
+        with pytest.raises(AssetTypeMismatchError) as exc_info:
+            validate_asset_type_for_field("m_Sprite", "Assets/sound.wav", AssetType.AUDIO_CLIP)
+        assert "m_Sprite" in str(exc_info.value)
+        assert "Sprite" in str(exc_info.value)
+        assert "AudioClip" in str(exc_info.value)
+
+    def test_invalid_sprite_for_audio_field(self):
+        with pytest.raises(AssetTypeMismatchError) as exc_info:
+            validate_asset_type_for_field("audioClip", "Assets/icon.png", AssetType.SPRITE)
+        assert "audioClip" in str(exc_info.value)
+        assert "AudioClip" in str(exc_info.value)
+        assert "Sprite" in str(exc_info.value)
+
+    def test_unknown_field_allows_anything(self):
+        # Unknown fields should allow any type
+        validate_asset_type_for_field("customField", "Assets/icon.png", AssetType.SPRITE)
+        validate_asset_type_for_field("customField", "Assets/sound.wav", AssetType.AUDIO_CLIP)
+
+    def test_texture_and_sprite_interchangeable(self):
+        # Sprite should be allowed where Texture is expected
+        validate_asset_type_for_field("m_Texture", "Assets/icon.png", AssetType.SPRITE)
+
+
+class TestResolveValueWithTypeValidation:
+    """Tests for resolve_value with type validation."""
+
+    def test_valid_type_match(self, tmp_path):
+        # Create sprite and meta file
+        sprite_path = tmp_path / "Assets" / "Sprites" / "icon.png"
+        sprite_path.parent.mkdir(parents=True)
+        sprite_path.write_bytes(b"PNG")
+
+        meta_path = Path(str(sprite_path) + ".meta")
+        meta_path.write_text(
+            "fileFormatVersion: 2\n"
+            "guid: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\n"
+            "TextureImporter:\n"
+            "  spriteMode: 1\n"
+        )
+
+        # Should succeed - sprite for m_Sprite field
+        result = resolve_value("@Assets/Sprites/icon.png", tmp_path, field_name="m_Sprite")
+        assert result["fileID"] == 21300000
+
+    def test_type_mismatch_raises_error(self, tmp_path):
+        # Create audio and meta file
+        audio_path = tmp_path / "Assets" / "Audio" / "jump.wav"
+        audio_path.parent.mkdir(parents=True)
+        audio_path.write_bytes(b"RIFF")
+
+        meta_path = Path(str(audio_path) + ".meta")
+        meta_path.write_text(
+            "fileFormatVersion: 2\n"
+            "guid: b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5\n"
+            "AudioImporter:\n"
+            "  serializedVersion: 6\n"
+        )
+
+        # Should fail - audio for m_Sprite field
+        with pytest.raises(AssetTypeMismatchError) as exc_info:
+            resolve_value("@Assets/Audio/jump.wav", tmp_path, field_name="m_Sprite")
+        assert "m_Sprite" in str(exc_info.value)
+        assert "Sprite" in str(exc_info.value)
+        assert "AudioClip" in str(exc_info.value)
+
+    def test_batch_mode_validates_each_field(self, tmp_path):
+        # Create sprite and meta file
+        sprite_path = tmp_path / "Assets" / "Sprites" / "icon.png"
+        sprite_path.parent.mkdir(parents=True)
+        sprite_path.write_bytes(b"PNG")
+
+        meta_path = Path(str(sprite_path) + ".meta")
+        meta_path.write_text(
+            "fileFormatVersion: 2\n"
+            "guid: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\n"
+            "TextureImporter:\n"
+            "  spriteMode: 1\n"
+        )
+
+        # Should fail - sprite for audioClip field in batch mode
+        batch = {
+            "audioClip": "@Assets/Sprites/icon.png",  # Wrong type!
+        }
+        with pytest.raises(AssetTypeMismatchError) as exc_info:
+            resolve_value(batch, tmp_path)
+        assert "audioClip" in str(exc_info.value)
+
+    def test_unknown_field_allows_any_type(self, tmp_path):
+        # Create audio and meta file
+        audio_path = tmp_path / "Assets" / "Audio" / "jump.wav"
+        audio_path.parent.mkdir(parents=True)
+        audio_path.write_bytes(b"RIFF")
+
+        meta_path = Path(str(audio_path) + ".meta")
+        meta_path.write_text(
+            "fileFormatVersion: 2\n"
+            "guid: b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5\n"
+            "AudioImporter:\n"
+            "  serializedVersion: 6\n"
+        )
+
+        # Should succeed - unknown field allows any type
+        result = resolve_value("@Assets/Audio/jump.wav", tmp_path, field_name="customRef")
+        assert result["fileID"] == 8300000

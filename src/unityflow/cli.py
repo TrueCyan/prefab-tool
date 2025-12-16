@@ -1153,7 +1153,11 @@ def set_value_cmd(
     """
     from unityflow.parser import UnityYAMLDocument
     from unityflow.query import set_value, merge_values
-    from unityflow.asset_resolver import resolve_value, is_asset_reference
+    from unityflow.asset_resolver import (
+        resolve_value,
+        is_asset_reference,
+        AssetTypeMismatchError,
+    )
     import json
 
     # Count how many value modes are specified
@@ -1179,8 +1183,12 @@ def set_value_cmd(
     output_path = output or file
     project_root = find_unity_project_root(file)
 
+    # Extract field name from path for type validation
+    # e.g., "components/12345/m_Sprite" -> "m_Sprite"
+    field_name = set_path.rsplit("/", 1)[-1] if "/" in set_path else set_path
+
     if batch_values_json is not None:
-        # Batch mode
+        # Batch mode - field names are the dict keys
         try:
             parsed_values = json.loads(batch_values_json)
         except json.JSONDecodeError as e:
@@ -1191,9 +1199,12 @@ def set_value_cmd(
             click.echo("Error: --batch value must be a JSON object", err=True)
             sys.exit(1)
 
-        # Resolve asset references in batch values
+        # Resolve asset references in batch values (keys are used as field names)
         try:
             resolved_values = resolve_value(parsed_values, project_root)
+        except AssetTypeMismatchError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
         except ValueError as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(1)
@@ -1215,9 +1226,12 @@ def set_value_cmd(
         except json.JSONDecodeError:
             parsed_value = value
 
-        # Resolve asset references
+        # Resolve asset references with field name for type validation
         try:
-            resolved_value = resolve_value(parsed_value, project_root)
+            resolved_value = resolve_value(parsed_value, project_root, field_name=field_name)
+        except AssetTypeMismatchError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
         except ValueError as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(1)

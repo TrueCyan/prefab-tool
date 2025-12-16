@@ -17,10 +17,213 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from unityflow.asset_tracker import META_GUID_PATTERN
+
+
+class AssetType(Enum):
+    """Unity asset types for type validation."""
+
+    SPRITE = "Sprite"
+    TEXTURE = "Texture2D"
+    AUDIO_CLIP = "AudioClip"
+    MATERIAL = "Material"
+    PREFAB = "Prefab"
+    SCRIPT = "Script"
+    SCRIPTABLE_OBJECT = "ScriptableObject"
+    ANIMATION_CLIP = "AnimationClip"
+    ANIMATOR_CONTROLLER = "AnimatorController"
+    FONT = "Font"
+    SHADER = "Shader"
+    TEXT_ASSET = "TextAsset"
+    VIDEO_CLIP = "VideoClip"
+    MODEL = "Model"
+    UNKNOWN = "Unknown"
+
+
+# Extension to asset type mapping
+EXTENSION_TO_ASSET_TYPE: dict[str, AssetType] = {
+    # Sprites/Textures (images are typically used as sprites in 2D)
+    ".png": AssetType.SPRITE,
+    ".jpg": AssetType.SPRITE,
+    ".jpeg": AssetType.SPRITE,
+    ".tga": AssetType.SPRITE,
+    ".psd": AssetType.SPRITE,
+    ".tiff": AssetType.SPRITE,
+    ".gif": AssetType.SPRITE,
+    ".bmp": AssetType.SPRITE,
+    ".exr": AssetType.TEXTURE,  # HDR textures
+    ".hdr": AssetType.TEXTURE,
+    # Audio
+    ".wav": AssetType.AUDIO_CLIP,
+    ".mp3": AssetType.AUDIO_CLIP,
+    ".ogg": AssetType.AUDIO_CLIP,
+    ".aiff": AssetType.AUDIO_CLIP,
+    ".aif": AssetType.AUDIO_CLIP,
+    ".flac": AssetType.AUDIO_CLIP,
+    # Materials
+    ".mat": AssetType.MATERIAL,
+    # Scripts
+    ".cs": AssetType.SCRIPT,
+    # Prefabs
+    ".prefab": AssetType.PREFAB,
+    # ScriptableObjects
+    ".asset": AssetType.SCRIPTABLE_OBJECT,
+    # Animations
+    ".anim": AssetType.ANIMATION_CLIP,
+    ".controller": AssetType.ANIMATOR_CONTROLLER,
+    # Fonts
+    ".ttf": AssetType.FONT,
+    ".otf": AssetType.FONT,
+    ".fon": AssetType.FONT,
+    # Shaders
+    ".shader": AssetType.SHADER,
+    ".shadergraph": AssetType.SHADER,
+    # Text/Data
+    ".txt": AssetType.TEXT_ASSET,
+    ".json": AssetType.TEXT_ASSET,
+    ".xml": AssetType.TEXT_ASSET,
+    ".bytes": AssetType.TEXT_ASSET,
+    ".csv": AssetType.TEXT_ASSET,
+    # Models
+    ".fbx": AssetType.MODEL,
+    ".obj": AssetType.MODEL,
+    ".blend": AssetType.MODEL,
+    # Video
+    ".mp4": AssetType.VIDEO_CLIP,
+    ".webm": AssetType.VIDEO_CLIP,
+    ".mov": AssetType.VIDEO_CLIP,
+}
+
+
+# Field name patterns to expected asset types
+# Patterns are checked in order, first match wins
+FIELD_NAME_TO_EXPECTED_TYPES: list[tuple[re.Pattern, list[AssetType]]] = [
+    # Sprite fields (including camelCase like playerSprite)
+    (re.compile(r"(?i)(^|_)sprite($|s$|_)|[a-z]Sprite(s)?$"), [AssetType.SPRITE]),
+    (re.compile(r"^m_Sprite$"), [AssetType.SPRITE]),
+    # Audio fields
+    (re.compile(r"(?i)(audio|sound|clip|music|sfx)"), [AssetType.AUDIO_CLIP]),
+    (re.compile(r"^m_audioClip$", re.IGNORECASE), [AssetType.AUDIO_CLIP]),
+    # Material fields
+    (re.compile(r"(?i)(^|_)material($|s$|_)"), [AssetType.MATERIAL]),
+    (re.compile(r"^m_Material"), [AssetType.MATERIAL]),
+    (re.compile(r"^m_Materials"), [AssetType.MATERIAL]),
+    # Prefab fields
+    (re.compile(r"(?i)prefab"), [AssetType.PREFAB]),
+    # Script fields
+    (re.compile(r"^m_Script$"), [AssetType.SCRIPT]),
+    # Animator fields
+    (re.compile(r"(?i)(animator|controller)"), [AssetType.ANIMATOR_CONTROLLER]),
+    (re.compile(r"^m_Controller$"), [AssetType.ANIMATOR_CONTROLLER]),
+    # Animation fields
+    (re.compile(r"(?i)(anim|animation)(?!.*controller)"), [AssetType.ANIMATION_CLIP]),
+    # Font fields
+    (re.compile(r"(?i)font"), [AssetType.FONT]),
+    # Texture fields (general textures, not sprites)
+    (re.compile(r"(?i)texture"), [AssetType.TEXTURE, AssetType.SPRITE]),
+    (re.compile(r"^m_Texture"), [AssetType.TEXTURE, AssetType.SPRITE]),
+    # Mesh/Model fields
+    (re.compile(r"(?i)(mesh|model)"), [AssetType.MODEL]),
+    # Video fields
+    (re.compile(r"(?i)video"), [AssetType.VIDEO_CLIP]),
+    # ScriptableObject fields (generic data references)
+    (re.compile(r"(?i)(data|config|settings|so$)"), [AssetType.SCRIPTABLE_OBJECT]),
+]
+
+
+class AssetTypeMismatchError(ValueError):
+    """Error raised when asset type doesn't match expected field type."""
+
+    def __init__(
+        self,
+        field_name: str,
+        asset_path: str,
+        expected_types: list[AssetType],
+        actual_type: AssetType,
+    ):
+        self.field_name = field_name
+        self.asset_path = asset_path
+        self.expected_types = expected_types
+        self.actual_type = actual_type
+        expected_str = ", ".join(t.value for t in expected_types)
+        super().__init__(
+            f"Type mismatch for field '{field_name}': "
+            f"expected {expected_str}, but '{asset_path}' is {actual_type.value}"
+        )
+
+
+def get_asset_type_from_extension(extension: str) -> AssetType:
+    """Get the asset type from a file extension.
+
+    Args:
+        extension: File extension (with or without leading dot)
+
+    Returns:
+        AssetType for the extension
+    """
+    ext = extension.lower()
+    if not ext.startswith("."):
+        ext = "." + ext
+    return EXTENSION_TO_ASSET_TYPE.get(ext, AssetType.UNKNOWN)
+
+
+def get_expected_types_for_field(field_name: str) -> list[AssetType] | None:
+    """Get expected asset types for a field name.
+
+    Args:
+        field_name: The field name (e.g., 'm_Sprite', 'audioClip', 'enemyPrefab')
+
+    Returns:
+        List of acceptable AssetTypes, or None if no expectation
+    """
+    for pattern, types in FIELD_NAME_TO_EXPECTED_TYPES:
+        if pattern.search(field_name):
+            return types
+    return None
+
+
+def validate_asset_type_for_field(
+    field_name: str,
+    asset_path: str,
+    asset_type: AssetType,
+) -> None:
+    """Validate that an asset type is compatible with a field.
+
+    Args:
+        field_name: The field name being set
+        asset_path: The asset path (for error messages)
+        asset_type: The actual asset type
+
+    Raises:
+        AssetTypeMismatchError: If the type doesn't match expectations
+    """
+    expected_types = get_expected_types_for_field(field_name)
+
+    if expected_types is None:
+        # No expectation for this field, allow anything
+        return
+
+    if asset_type in expected_types:
+        return
+
+    # Special case: SPRITE can be used where TEXTURE is expected
+    if asset_type == AssetType.SPRITE and AssetType.TEXTURE in expected_types:
+        return
+
+    # Special case: TEXTURE can be used where SPRITE is expected
+    if asset_type == AssetType.TEXTURE and AssetType.SPRITE in expected_types:
+        return
+
+    raise AssetTypeMismatchError(
+        field_name=field_name,
+        asset_path=asset_path,
+        expected_types=expected_types,
+        actual_type=asset_type,
+    )
 
 
 # Standard fileIDs for different asset types
@@ -312,6 +515,7 @@ def resolve_asset_reference(
 def resolve_value(
     value: Any,
     project_root: Path | None = None,
+    field_name: str | None = None,
 ) -> Any:
     """Resolve a value, converting asset references to Unity reference dicts.
 
@@ -321,26 +525,37 @@ def resolve_value(
     Args:
         value: Value to process
         project_root: Unity project root for resolving relative paths
+        field_name: The field name being set (for type validation)
 
     Returns:
         Processed value with asset references resolved
 
     Raises:
         ValueError: If an asset reference cannot be resolved
+        AssetTypeMismatchError: If the asset type doesn't match the field type
     """
     if isinstance(value, str):
         if is_asset_reference(value):
             result = resolve_asset_reference(value, project_root)
             if result is None:
                 raise ValueError(f"Could not resolve asset reference: {value}")
+
+            # Validate asset type if field name is provided
+            if field_name and result.asset_path:
+                suffix = Path(result.asset_path).suffix.lower()
+                asset_type = get_asset_type_from_extension(suffix)
+                validate_asset_type_for_field(field_name, result.asset_path, asset_type)
+
             return result.to_dict()
         return value
 
     elif isinstance(value, dict):
-        return {k: resolve_value(v, project_root) for k, v in value.items()}
+        # For dicts, use the key as the field name for validation
+        return {k: resolve_value(v, project_root, field_name=k) for k, v in value.items()}
 
     elif isinstance(value, list):
-        return [resolve_value(item, project_root) for item in value]
+        # For lists, use the parent field name
+        return [resolve_value(item, project_root, field_name) for item in value]
 
     return value
 
