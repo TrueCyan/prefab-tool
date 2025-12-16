@@ -34,10 +34,18 @@ unityflow add-object Scene.unity --name "Icon" --ui --parent "Canvas/Panel/Butto
 
 ### Canvas 설정
 
-Canvas는 모든 UI의 루트입니다. 보통 씬에 미리 존재하지만, 새로 추가할 수도 있습니다.
+**모든 UI 요소는 반드시 Canvas의 자식이어야 합니다.** 씬에 Canvas가 없으면 새로 추가해야 합니다.
+
+Canvas를 추가할 때는 **필수 컴포넌트를 반드시 함께 추가**해야 합니다:
+- **CanvasScaler**: UI 스케일링 처리
+- **GraphicRaycaster**: 클릭/터치 감지 (없으면 UI 클릭이 작동하지 않음!)
 
 ```bash
-# Canvas에 필수 컴포넌트 추가
+# Canvas GameObject 추가
+unityflow add-object Scene.unity --name "Canvas" --ui
+
+# 필수 컴포넌트 추가 (반드시 모두 추가할 것!)
+unityflow add-component Scene.unity --to "Canvas" --type Canvas
 unityflow add-component Scene.unity --to "Canvas" --type CanvasScaler
 unityflow add-component Scene.unity --to "Canvas" --type GraphicRaycaster
 ```
@@ -285,11 +293,10 @@ unityflow query Scene.unity --find-component "EventSystem"
 
 RectTransform은 UI GameObject의 필수 컴포넌트이므로 삭제할 수 없습니다.
 
-### 4. Canvas 계층 구조
+### 4. GraphicRaycaster 필수
 
-- 모든 UI 요소는 Canvas의 자식이어야 합니다
-- Canvas는 Screen Space - Overlay, Screen Space - Camera, World Space 모드를 지원합니다
-- 중첩된 Canvas는 성능 최적화에 유용합니다
+Canvas에 GraphicRaycaster가 없으면 **UI 클릭이 전혀 작동하지 않습니다**.
+Canvas를 새로 만들 때 반드시 Canvas, CanvasScaler, GraphicRaycaster를 함께 추가하세요.
 
 ---
 
