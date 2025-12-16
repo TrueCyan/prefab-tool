@@ -60,8 +60,8 @@ class UnityPrefabNormalizer:
         use_hex_floats: bool = False,  # Default to decimal for readability
         normalize_quaternions: bool = True,
         float_precision: int = 6,
-        reorder_script_fields: bool = False,
-        remove_obsolete_fields: bool = False,
+        reorder_script_fields: bool = True,
+        remove_obsolete_fields: bool = True,
         project_root: str | Path | None = None,
     ):
         """Initialize the normalizer.
@@ -74,7 +74,7 @@ class UnityPrefabNormalizer:
             normalize_quaternions: Ensure quaternion w >= 0
             float_precision: Decimal places for float normalization (if not using hex)
             reorder_script_fields: Reorder MonoBehaviour fields according to C# script
-            remove_obsolete_fields: Remove fields not in script and merge FormerlySerializedAs
+            remove_obsolete_fields: Sync fields with C# script (remove obsolete, add missing, merge renamed)
             project_root: Unity project root for script resolution (auto-detected if None)
         """
         self.sort_documents = sort_documents

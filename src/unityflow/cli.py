@@ -195,9 +195,9 @@ def main() -> None:
     help="Disable reordering MonoBehaviour fields according to C# script declaration order",
 )
 @click.option(
-    "--remove-obsolete-fields",
+    "--no-sync-script-fields",
     is_flag=True,
-    help="Remove obsolete fields (not in C# script) and merge FormerlySerializedAs renamed fields",
+    help="Don't sync fields with C# script (remove obsolete, add missing, merge renamed)",
 )
 @click.option(
     "--project-root",
@@ -224,7 +224,7 @@ def normalize(
     parallel_jobs: int,
     in_place: bool,
     no_reorder_fields: bool,
-    remove_obsolete_fields: bool,
+    no_sync_script_fields: bool,
     project_root: Path | None,
 ) -> None:
     """Normalize Unity YAML files for deterministic serialization.
@@ -357,7 +357,7 @@ def normalize(
         "normalize_quaternions": not no_normalize_quaternions,
         "float_precision": precision,
         "reorder_script_fields": not no_reorder_fields,
-        "remove_obsolete_fields": remove_obsolete_fields,
+        "remove_obsolete_fields": not no_sync_script_fields,
         "project_root": project_root,
     }
 
