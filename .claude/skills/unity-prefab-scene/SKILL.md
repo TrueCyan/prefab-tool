@@ -119,27 +119,27 @@ unityflow add-object Scene.unity --name "Enemy" --position "10,0,5"
 unityflow add-object Scene.unity --name "Button" --ui --parent 67890  # UI용 RectTransform
 
 # GameObject 복제
-unityflow clone-object Scene.unity --id 12345
-unityflow clone-object Scene.unity --id 12345 --name "Player2"
-unityflow clone-object Scene.unity --id 12345 --deep  # 자식 포함 복제
+unityflow clone-object Scene.unity --id "Player"
+unityflow clone-object Scene.unity --id "Player" --name "Player2"
+unityflow clone-object Scene.unity --id "Canvas/Panel" --deep  # 자식 포함 복제
 
 # GameObject 삭제
-unityflow delete-object Scene.unity --id 12345
-unityflow delete-object Scene.unity --id 12345 --cascade  # 자식 포함 삭제
+unityflow delete-object Scene.unity --id "Enemy"
+unityflow delete-object Scene.unity --id "Canvas/Panel" --cascade  # 자식 포함 삭제
 ```
 
 ### 컴포넌트 조작
 
 ```bash
-# 내장 컴포넌트 추가
-unityflow add-component Scene.unity --to 12345 --type SpriteRenderer
-unityflow add-component Scene.unity --to 12345 --type Camera
+# 컴포넌트 추가 (경로로 대상 지정)
+unityflow add-component Scene.unity --to "Player" --type SpriteRenderer
+unityflow add-component Scene.unity --to "Canvas/Panel/Button" --type Image
 
 # MonoBehaviour 추가 (스크립트 GUID 필요)
-unityflow add-component Scene.unity --to 12345 --script "abc123..." \
+unityflow add-component Scene.unity --to "Player" --script "abc123..." \
     --props '{"speed": 5.0, "health": 100}'
 
-# 컴포넌트 삭제
+# 컴포넌트 삭제 (컴포넌트 fileID 필요)
 unityflow delete-component Scene.unity --id 67890
 ```
 

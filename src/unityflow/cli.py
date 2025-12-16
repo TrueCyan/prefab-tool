@@ -3654,10 +3654,10 @@ def _create_builtin_component(
 @click.option(
     "--id",
     "-i",
-    "gameobject_id",
-    type=int,
+    "gameobject_path",
+    type=str,
     required=True,
-    help="FileID of the GameObject to delete",
+    help="GameObject path (e.g., 'Canvas/Panel/Button')",
 )
 @click.option(
     "--cascade",
@@ -3678,7 +3678,7 @@ def _create_builtin_component(
 )
 def delete_object(
     file: Path,
-    gameobject_id: int,
+    gameobject_path: str,
     cascade: bool,
     force: bool,
     output: Path | None,
@@ -3691,13 +3691,16 @@ def delete_object(
     Examples:
 
         # Delete a GameObject (keeps children)
-        unityflow delete-object Scene.unity --id 12345
+        unityflow delete-object Scene.unity --id "Canvas/Panel/Button"
 
         # Delete a GameObject and all its children
-        unityflow delete-object Scene.unity --id 12345 --cascade
+        unityflow delete-object Scene.unity --id "Enemy" --cascade
 
         # Delete without confirmation
-        unityflow delete-object Scene.unity --id 12345 --force
+        unityflow delete-object Scene.unity --id "Player" --force
+
+        # When multiple GameObjects have the same path, use index
+        unityflow delete-object Scene.unity --id "Canvas/Panel/Button[1]"
     """
     from unityflow.parser import UnityYAMLDocument
 
@@ -3709,16 +3712,15 @@ def delete_object(
 
     output_path = output or file
 
-    # Find GameObject
-    obj = doc.get_by_file_id(gameobject_id)
-    if obj is None:
-        click.echo(f"Error: GameObject with fileID {gameobject_id} not found", err=True)
+    # Resolve GameObject by path
+    gameobject_id, error = _resolve_gameobject_by_path(doc, gameobject_path)
+    if error:
+        click.echo(f"Error: {error}", err=True)
         sys.exit(1)
 
-    if obj.class_id != 1:
-        click.echo(f"Error: fileID {gameobject_id} is not a GameObject", err=True)
-        click.echo(f"  Found: {obj.class_name}", err=True)
-        click.echo("Use delete-component for components", err=True)
+    obj = doc.get_by_file_id(gameobject_id)
+    if obj is None or obj.class_id != 1:
+        click.echo(f"Error: Failed to resolve GameObject at '{gameobject_path}'", err=True)
         sys.exit(1)
 
     # Collect all objects to delete
@@ -3918,10 +3920,10 @@ def _collect_objects_to_delete(
 @click.option(
     "--id",
     "-i",
-    "source_id",
-    type=int,
+    "source_path",
+    type=str,
     required=True,
-    help="FileID of the GameObject to clone",
+    help="GameObject path to clone (e.g., 'Canvas/Panel/Button')",
 )
 @click.option(
     "--name",
@@ -3934,10 +3936,10 @@ def _collect_objects_to_delete(
 @click.option(
     "--parent",
     "-p",
-    "parent_id",
-    type=int,
+    "parent_path",
+    type=str,
     default=None,
-    help="Parent Transform fileID for the clone (default: same as source)",
+    help="Parent GameObject path for the clone (default: same as source)",
 )
 @click.option(
     "--position",
@@ -3958,9 +3960,9 @@ def _collect_objects_to_delete(
 )
 def clone_object(
     file: Path,
-    source_id: int,
+    source_path: str,
     new_name: str | None,
-    parent_id: int | None,
+    parent_path: str | None,
     position: str | None,
     deep: bool,
     output: Path | None,
@@ -3972,19 +3974,22 @@ def clone_object(
     Examples:
 
         # Simple clone (shallow)
-        unityflow clone-object Scene.unity --id 12345
+        unityflow clone-object Scene.unity --id "Player"
 
         # Clone with new name
-        unityflow clone-object Scene.unity --id 12345 --name "Player2"
+        unityflow clone-object Scene.unity --id "Player" --name "Player2"
 
         # Clone to different parent
-        unityflow clone-object Scene.unity --id 12345 --parent 67890
+        unityflow clone-object Scene.unity --id "Enemy" --parent "Enemies"
 
         # Clone with position offset
-        unityflow clone-object Scene.unity --id 12345 --position "5,0,0"
+        unityflow clone-object Scene.unity --id "Player" --position "5,0,0"
 
         # Deep clone (include children)
-        unityflow clone-object Scene.unity --id 12345 --deep
+        unityflow clone-object Scene.unity --id "Canvas/Panel" --deep
+
+        # When multiple GameObjects have the same path, use index
+        unityflow clone-object Scene.unity --id "Canvas/Panel/Button[1]"
     """
     from unityflow.parser import UnityYAMLDocument, UnityYAMLObject
     import copy
@@ -3997,16 +4002,35 @@ def clone_object(
 
     output_path = output or file
 
-    # Find source GameObject
-    source_go = doc.get_by_file_id(source_id)
-    if source_go is None:
-        click.echo(f"Error: GameObject with fileID {source_id} not found", err=True)
+    # Resolve source GameObject by path
+    source_id, error = _resolve_gameobject_by_path(doc, source_path)
+    if error:
+        click.echo(f"Error: {error}", err=True)
         sys.exit(1)
 
-    if source_go.class_id != 1:
-        click.echo(f"Error: fileID {source_id} is not a GameObject", err=True)
-        click.echo(f"  Found: {source_go.class_name}", err=True)
+    source_go = doc.get_by_file_id(source_id)
+    if source_go is None or source_go.class_id != 1:
+        click.echo(f"Error: Failed to resolve GameObject at '{source_path}'", err=True)
         sys.exit(1)
+
+    # Resolve parent if specified
+    parent_id = None
+    if parent_path:
+        parent_go_id, error = _resolve_gameobject_by_path(doc, parent_path)
+        if error:
+            click.echo(f"Error: {error}", err=True)
+            sys.exit(1)
+        # Find the Transform component of the parent GameObject
+        parent_go = doc.get_by_file_id(parent_go_id)
+        if parent_go:
+            parent_content = parent_go.get_content()
+            if parent_content and "m_Component" in parent_content:
+                for comp_ref in parent_content["m_Component"]:
+                    comp_id = comp_ref.get("component", {}).get("fileID", 0)
+                    comp = doc.get_by_file_id(comp_id)
+                    if comp and comp.class_id in (4, 224):  # Transform or RectTransform
+                        parent_id = comp_id
+                        break
 
     # Parse position offset
     pos_offset = None
@@ -4125,7 +4149,7 @@ def clone_object(
 
     new_go_id = id_map[source_id]
     click.echo(f"Cloned GameObject")
-    click.echo(f"  Source fileID: {source_id}")
+    click.echo(f"  Source: {source_path}")
     click.echo(f"  New fileID: {new_go_id}")
     click.echo(f"  Total objects cloned: {len(cloned_objects)}")
 

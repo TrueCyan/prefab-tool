@@ -541,7 +541,7 @@ class TestDeleteObjectCommand:
                 "delete-object",
                 str(test_file),
                 "--id",
-                "100000",
+                "BasicPrefab",  # GameObject path
                 "--force",
             ],
         )
@@ -561,7 +561,7 @@ class TestDeleteObjectCommand:
 
         result = runner.invoke(
             main,
-            ["delete-object", str(test_file), "--id", "999999", "--force"],
+            ["delete-object", str(test_file), "--id", "NonExistent/Path", "--force"],
         )
 
         assert result.exit_code != 0
@@ -619,12 +619,12 @@ class TestCloneObjectCommand:
 
         result = runner.invoke(
             main,
-            ["clone-object", str(test_file), "--id", "100000"],
+            ["clone-object", str(test_file), "--id", "BasicPrefab"],
         )
 
         assert result.exit_code == 0
         assert "Cloned GameObject" in result.output
-        assert "Source fileID: 100000" in result.output
+        assert "Source:" in result.output
         assert "New fileID:" in result.output
 
         # Verify the clone exists
@@ -639,7 +639,7 @@ class TestCloneObjectCommand:
 
         result = runner.invoke(
             main,
-            ["clone-object", str(test_file), "--id", "100000", "--name", "MyClone"],
+            ["clone-object", str(test_file), "--id", "BasicPrefab", "--name", "MyClone"],
         )
 
         assert result.exit_code == 0
@@ -658,7 +658,7 @@ class TestCloneObjectCommand:
                 "clone-object",
                 str(test_file),
                 "--id",
-                "100000",
+                "BasicPrefab",
                 "--position",
                 "5,0,0",
             ],
@@ -678,7 +678,7 @@ class TestCloneObjectCommand:
 
         result = runner.invoke(
             main,
-            ["clone-object", str(test_file), "--id", "999999"],
+            ["clone-object", str(test_file), "--id", "NonExistent/Path"],
         )
 
         assert result.exit_code != 0
