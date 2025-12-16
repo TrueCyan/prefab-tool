@@ -213,6 +213,45 @@ unityflow scan-meta "Library/PackageCache/com.unity.ugui@*" -r --filter Button
 unityflow scan-meta Assets/Scripts -r --scripts-only
 ```
 
+### .meta 파일 생성 (generate-meta)
+
+새 파일이나 폴더를 Unity 프로젝트에 추가할 때 `.meta` 파일이 필요합니다. Unity를 열지 않고도 `.meta` 파일을 생성할 수 있습니다.
+
+```bash
+# 단일 파일에 대해 meta 생성
+unityflow generate-meta Assets/Scripts/Player.cs
+
+# 여러 파일 한번에 처리
+unityflow generate-meta Assets/Textures/*.png
+
+# 폴더 전체를 재귀적으로 처리
+unityflow generate-meta Assets/NewFolder -r
+
+# 스프라이트로 생성 (PPU 지정 가능)
+unityflow generate-meta icon.png --sprite --ppu 32
+
+# 결정론적 GUID 생성 (재현 가능한 빌드용)
+unityflow generate-meta Assets/Data/config.json --seed "config.json"
+
+# 특정 GUID 지정
+unityflow generate-meta MyScript.cs --guid "abcd1234efgh5678ijkl9012mnop3456"
+
+# 미리보기 (실제 파일 생성 안함)
+unityflow generate-meta Assets/ -r --dry-run
+
+# 기존 meta 파일 덮어쓰기
+unityflow generate-meta Player.cs --overwrite
+```
+
+**지원 에셋 타입:**
+- **스크립트** (.cs) → `MonoImporter`
+- **텍스처** (.png, .jpg, .psd, .tga 등) → `TextureImporter`
+- **오디오** (.wav, .mp3, .ogg 등) → `AudioImporter`
+- **3D 모델** (.fbx, .obj 등) → `ModelImporter`
+- **셰이더** (.shader, .hlsl) → `ShaderImporter`
+- **Unity YAML** (.prefab, .unity, .asset, .mat) → `DefaultImporter`
+- **폴더** → `DefaultImporter` (folderAsset: yes)
+
 ### 기타 유용한 명령어
 
 ```bash
@@ -384,15 +423,12 @@ MonoBehaviour:
 
 ScriptableObject 에셋을 생성할 때 반드시 `.meta` 파일도 함께 생성해야 합니다:
 
-```yaml
-fileFormatVersion: 2
-guid: UNIQUE_GUID_FOR_THIS_ASSET
-NativeFormatImporter:
-  externalObjects: {}
-  mainObjectFileID: 11400000
-  userData:
-  assetBundleName:
-  assetBundleVariant:
+```bash
+# CLI로 .meta 파일 자동 생성 (권장)
+unityflow generate-meta Assets/Data/GameConfig.asset
+
+# 결정론적 GUID가 필요한 경우
+unityflow generate-meta Assets/Data/GameConfig.asset --seed "GameConfig"
 ```
 
 ---
