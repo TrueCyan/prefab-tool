@@ -25,11 +25,10 @@ Unity 프리팹(.prefab), 씬(.unity), ScriptableObject(.asset) 파일을 프로
 
 - ✅ `unityflow query` - 데이터 조회 및 검색
 - ✅ `unityflow set` - 값 수정 (단일 값, 배치 수정, 새 필드 생성)
-- ✅ `unityflow set --value "@에셋경로"` - 에셋 참조 (GUID/fileID 자동 해석)
+- ✅ `unityflow set --value "@에셋경로"` - 에셋 연결
 - ✅ `unityflow add-object` / `delete-object` / `clone-object` - GameObject 조작
-- ✅ `unityflow add-component` / `delete-component` - 컴포넌트 조작
+- ✅ `unityflow add-component` - 컴포넌트 조작
 - ✅ `unityflow export` + `unityflow import` - 복잡한 구조 편집
-- ✅ `unityflow scan-meta` / `scan-scripts` - GUID 조회
 
 ### 이유
 
@@ -68,8 +67,8 @@ unityflow query Scene.unity --find-name "*Enemy*"
 unityflow query Scene.unity --find-component "SpriteRenderer"
 unityflow query Scene.unity --find-component "Light2D"
 
-# 스크립트 GUID로 MonoBehaviour 찾기
-unityflow query Scene.unity --find-script "abc123def456..."
+# 스크립트로 MonoBehaviour 찾기
+unityflow query Scene.unity --find-script "PlayerController"
 ```
 
 ### 값 수정 (set)
@@ -78,7 +77,7 @@ unityflow query Scene.unity --find-script "abc123def456..."
 - `--value`: 단일 값 설정
 - `--batch`: 여러 필드 한번에 설정
 
-**에셋 참조 자동 해석**: `@` 접두사로 에셋 경로를 지정하면 GUID와 fileID가 자동으로 해석됩니다.
+**에셋 연결**: `@` 접두사로 에셋 경로를 지정합니다.
 
 ```bash
 # Transform 위치 설정
@@ -113,9 +112,9 @@ unityflow set Scene.unity \
 ```bash
 # 새 GameObject 추가
 unityflow add-object Scene.unity --name "Player"
-unityflow add-object Scene.unity --name "Child" --parent 12345
+unityflow add-object Scene.unity --name "Child" --parent "Canvas"
 unityflow add-object Scene.unity --name "Enemy" --position "10,0,5"
-unityflow add-object Scene.unity --name "Button" --ui --parent 67890  # UI용 RectTransform
+unityflow add-object Scene.unity --name "Button" --ui --parent "Canvas/Panel"  # UI용 RectTransform
 
 # GameObject 복제
 unityflow clone-object Scene.unity --id "Player"
@@ -134,18 +133,14 @@ unityflow delete-object Scene.unity --id "Canvas/Panel" --cascade  # 자식 포�
 unityflow add-component Scene.unity --to "Player" --type SpriteRenderer
 unityflow add-component Scene.unity --to "Canvas/Panel/Button" --type Image
 
-# MonoBehaviour 추가 (스크립트 GUID 필요)
-unityflow add-component Scene.unity --to "Player" --script "abc123..." \
+# 커스텀 스크립트 추가 (스크립트 이름으로 지정)
+unityflow add-component Scene.unity --to "Player" --script PlayerController \
     --props '{"speed": 5.0, "health": 100}'
-
-# 컴포넌트 삭제 (컴포넌트 fileID 필요)
-unityflow delete-component Scene.unity --id 67890
 ```
 
-### 에셋 참조 자동 해석 (@ 접두사)
+### 에셋 연결 (@ 접두사)
 
-`@` 접두사를 사용하면 에셋 경로에서 GUID와 fileID가 자동으로 해석됩니다.
-에셋의 `.meta` 파일을 읽어서 정확한 참조 정보를 생성합니다.
+`@` 접두사를 사용하여 에셋을 연결합니다.
 
 ```bash
 # 스프라이트 연결 (Single 모드)
@@ -225,19 +220,6 @@ unityflow normalize Player.prefab
 unityflow normalize MainScene.unity
 ```
 
-### GUID 조회
-
-```bash
-# 파일에서 사용 중인 스크립트 GUID 추출
-unityflow scan-scripts Scene.unity --show-properties
-
-# 패키지 폴더에서 GUID 추출
-unityflow scan-meta "Library/PackageCache/com.unity.ugui@*" -r --filter Button
-
-# 프로젝트 스크립트 GUID 추출
-unityflow scan-meta Assets/Scripts -r --scripts-only
-```
-
 ### .meta 파일 생성 (generate-meta)
 
 새 파일이나 폴더를 Unity 프로젝트에 추가할 때 `.meta` 파일이 필요합니다. Unity를 열지 않고도 `.meta` 파일을 생성할 수 있습니다.
@@ -254,12 +236,6 @@ unityflow generate-meta Assets/NewFolder -r
 
 # 스프라이트로 생성 (PPU 지정 가능)
 unityflow generate-meta icon.png --sprite --ppu 32
-
-# 결정론적 GUID 생성 (재현 가능한 빌드용)
-unityflow generate-meta Assets/Data/config.json --seed "config.json"
-
-# 특정 GUID 지정
-unityflow generate-meta MyScript.cs --guid "abcd1234efgh5678ijkl9012mnop3456"
 
 # 미리보기 (실제 파일 생성 안함)
 unityflow generate-meta Assets/ -r --dry-run
@@ -335,42 +311,30 @@ unityflow diff Player.prefab Player_backup.prefab
     "objectCount": 15
   },
   "gameObjects": {
-    "12345": {
+    "...": {
       "name": "Player",
       "layer": 0,
       "tag": "Player",
       "isActive": true,
-      "components": ["12346", "12347"]
+      "components": ["..."]
     }
   },
   "components": {
-    "12346": {
+    "...": {
       "type": "Transform",
-      "classId": 4,
-      "gameObject": "12345",
       "localPosition": {"x": 0, "y": 0, "z": 0},
       "localRotation": {"x": 0, "y": 0, "z": 0, "w": 1},
       "localScale": {"x": 1, "y": 1, "z": 1},
       "parent": null,
-      "children": ["12348"]
+      "children": ["..."]
     },
-    "12347": {
+    "...": {
       "type": "MonoBehaviour",
-      "classId": 114,
-      "gameObject": "12345",
-      "scriptRef": {
-        "fileID": 11500000,
-        "guid": "abc123...",
-        "type": 3
-      },
       "enabled": true,
       "properties": {
         "speed": 5.0
       }
     }
-  },
-  "_rawFields": {
-    "12345": {"m_ObjectHideFlags": 0}
   }
 }
 ```
@@ -469,31 +433,6 @@ doc.save("output.prefab")  # 또는 .unity, .asset
 
 ---
 
-## Unity Class ID 참조
-
-| ID | 클래스명 | 설명 |
-|----|----------|------|
-| 1 | GameObject | 게임 오브젝트 |
-| 4 | Transform | 3D 트랜스폼 |
-| 20 | Camera | 카메라 |
-| 23 | MeshRenderer | 메시 렌더러 |
-| 33 | MeshFilter | 메시 필터 |
-| 54 | Rigidbody | 강체 물리 |
-| 65 | BoxCollider | 박스 콜라이더 |
-| 81 | AudioListener | 오디오 리스너 |
-| 82 | AudioSource | 오디오 소스 |
-| 95 | Animator | 애니메이터 |
-| 108 | Light | 3D 라이트 |
-| 114 | MonoBehaviour | **사용자 스크립트 (기본 사용)** |
-| 212 | SpriteRenderer | 스프라이트 렌더러 |
-| 222 | CanvasRenderer | 캔버스 렌더러 |
-| 223 | Canvas | UI 캔버스 |
-| 224 | RectTransform | UI 트랜스폼 |
-| 225 | CanvasGroup | 캔버스 그룹 |
-| 1001 | PrefabInstance | 프리팹 인스턴스 |
-
----
-
 ## 컴포넌트 추가 (add-component)
 
 `--to`로 대상 GameObject 경로를 지정하고 `--type`으로 컴포넌트를 추가합니다.
@@ -509,6 +448,9 @@ unityflow add-component Scene.unity --to "Canvas/Panel/Button[1]" --type Image
 # 속성과 함께 추가
 unityflow add-component Scene.unity --to "Canvas/Panel" --type Image \
     --props '{"m_Color": {"r": 1, "g": 0, "b": 0, "a": 1}}'
+
+# 커스텀 스크립트 추가 (이름으로 지정)
+unityflow add-component Scene.unity --to "Player" --script PlayerController
 ```
 
 ### 지원 컴포넌트
@@ -522,42 +464,15 @@ unityflow add-component Scene.unity --to "Canvas/Panel" --type Image \
 | **시스템** | EventSystem, InputSystemUIInputModule |
 | **렌더링** | Light2D |
 
-### 커스텀 스크립트 추가
-
-프로젝트 스크립트는 `--script` 옵션으로 GUID를 지정합니다:
-
-```bash
-unityflow add-component Scene.unity --to "Player" --script "abc123def456..."
-```
-
-스크립트 GUID 조회:
-
-```bash
-unityflow scan-scripts Scene.unity --show-properties
-unityflow scan-meta Assets/Scripts -r --scripts-only
-```
-
 ---
 
 ## 주의사항
 
 1. **항상 백업**: 원본 파일을 수정하기 전에 백업하거나 `-o` 옵션으로 새 파일에 저장
-2. **fileID 충돌 방지**: 새 오브젝트 생성 시 `doc.generate_unique_file_id()` 사용
-3. **정규화 필수**: 편집 후 `unityflow normalize`로 정규화하여 Git 노이즈 방지
-4. **검증 권장**: 중요한 수정 후 `unityflow validate`로 무결성 확인
-5. **GUID 보존**: 외부 에셋 참조(스크립트, 텍스처 등)의 GUID는 변경하지 않음
-6. **classId 보존**: **절대로 임의의 classId를 사용하지 마세요!** 새 컴포넌트 추가 시 반드시 올바른 classId 사용
-7. **Mask + Image 알파값**: Mask 컴포넌트 사용 시 Image 알파값이 0이면 마스킹이 작동하지 않음. `m_Color.a: 1` 설정 후 `m_ShowMaskGraphic: 0`으로 숨기기
-8. **EventSystem 필수**: UI가 클릭에 반응하려면 씬에 반드시 EventSystem이 있어야 함
-
-### classId 관련 중요 경고
-
-⚠️ **절대 SceneRoots classId(1660057539)를 다른 컴포넌트에 사용하지 마세요!**
-
-잘못된 classId 사용 시:
-- "cast failed from SceneRoots to Component" 오류 발생
-- 컴포넌트가 로드되지 않고 제거됨
-- 씬 파일이 손상될 수 있음
+2. **정규화 필수**: 편집 후 `unityflow normalize`로 정규화하여 Git 노이즈 방지
+3. **검증 권장**: 중요한 수정 후 `unityflow validate`로 무결성 확인
+4. **Mask + Image 알파값**: Mask 컴포넌트 사용 시 Image 알파값이 0이면 마스킹이 작동하지 않음. `m_Color.a: 1` 설정 후 `m_ShowMaskGraphic: 0`으로 숨기기
+5. **EventSystem 필수**: UI가 클릭에 반응하려면 씬에 반드시 EventSystem이 있어야 함
 
 ---
 
