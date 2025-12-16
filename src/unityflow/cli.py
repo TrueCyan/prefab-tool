@@ -134,29 +134,9 @@ def main() -> None:
     help="Show files that would be normalized without making changes",
 )
 @click.option(
-    "--no-sort-documents",
-    is_flag=True,
-    help="Don't sort documents by fileID",
-)
-@click.option(
-    "--no-sort-modifications",
-    is_flag=True,
-    help="Don't sort m_Modifications arrays",
-)
-@click.option(
-    "--no-normalize-floats",
-    is_flag=True,
-    help="Don't normalize floating-point values",
-)
-@click.option(
     "--hex-floats",
     is_flag=True,
     help="Use IEEE 754 hex format for floats (lossless)",
-)
-@click.option(
-    "--no-normalize-quaternions",
-    is_flag=True,
-    help="Don't normalize quaternions",
 )
 @click.option(
     "--precision",
@@ -190,16 +170,6 @@ def main() -> None:
     help="Modify files in place (same as not specifying -o)",
 )
 @click.option(
-    "--no-reorder-fields",
-    is_flag=True,
-    help="Disable reordering MonoBehaviour fields according to C# script declaration order",
-)
-@click.option(
-    "--no-sync-script-fields",
-    is_flag=True,
-    help="Don't sync fields with C# script (remove obsolete, add missing, merge renamed)",
-)
-@click.option(
     "--project-root",
     type=click.Path(exists=True, path_type=Path),
     help="Unity project root for script resolution (auto-detected if not specified)",
@@ -213,18 +183,12 @@ def normalize(
     since_ref: str | None,
     pattern: str | None,
     dry_run: bool,
-    no_sort_documents: bool,
-    no_sort_modifications: bool,
-    no_normalize_floats: bool,
     hex_floats: bool,
-    no_normalize_quaternions: bool,
     precision: int,
     output_format: str,
     progress: bool,
     parallel_jobs: int,
     in_place: bool,
-    no_reorder_fields: bool,
-    no_sync_script_fields: bool,
     project_root: Path | None,
 ) -> None:
     """Normalize Unity YAML files for deterministic serialization.
@@ -267,10 +231,7 @@ def normalize(
         # Dry run to see what would be normalized
         unityflow normalize --changed-only --dry-run
 
-    Script-based field ordering (enabled by default):
-
-        # Disable field reordering
-        unityflow normalize Player.prefab --no-reorder-fields
+    Script-based field sync (auto-enabled when project root is found):
 
         # With explicit project root for script resolution
         unityflow normalize Player.prefab --project-root /path/to/unity/project
@@ -350,14 +311,8 @@ def normalize(
         sys.exit(1)
 
     normalizer_kwargs = {
-        "sort_documents": not no_sort_documents,
-        "sort_modifications": not no_sort_modifications,
-        "normalize_floats": not no_normalize_floats,
         "use_hex_floats": hex_floats,
-        "normalize_quaternions": not no_normalize_quaternions,
         "float_precision": precision,
-        "reorder_script_fields": not no_reorder_fields,
-        "remove_obsolete_fields": not no_sync_script_fields,
         "project_root": project_root,
     }
 

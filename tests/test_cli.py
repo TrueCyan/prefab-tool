@@ -57,7 +57,6 @@ class TestNormalizeCommand:
                 "normalize",
                 str(FIXTURES_DIR / "basic_prefab.prefab"),
                 "--stdout",
-                "--no-sort-documents",
                 "--precision",
                 "4",
             ],
