@@ -25,13 +25,26 @@ class SerializedField:
     is_public: bool = False
     has_serialize_field: bool = False
     line_number: int = 0
+    former_names: list[str] = field(default_factory=list)  # FormerlySerializedAs names
 
     @classmethod
-    def from_field_name(cls, name: str, field_type: str = "", **kwargs) -> "SerializedField":
+    def from_field_name(
+        cls,
+        name: str,
+        field_type: str = "",
+        former_names: list[str] | None = None,
+        **kwargs,
+    ) -> "SerializedField":
         """Create a SerializedField with auto-generated Unity name."""
         # Unity uses m_FieldName format for serialized fields
         unity_name = f"m_{name[0].upper()}{name[1:]}" if name else ""
-        return cls(name=name, unity_name=unity_name, field_type=field_type, **kwargs)
+        return cls(
+            name=name,
+            unity_name=unity_name,
+            field_type=field_type,
+            former_names=former_names or [],
+            **kwargs,
+        )
 
 
 @dataclass
@@ -58,6 +71,30 @@ class ScriptInfo:
             if f.unity_name == unity_name:
                 return i
         return -1
+
+    def get_valid_field_names(self) -> set[str]:
+        """Get all valid field names (current names only)."""
+        return {f.unity_name for f in self.fields}
+
+    def get_rename_mapping(self) -> dict[str, str]:
+        """Get mapping of old field names to new field names.
+
+        Returns:
+            Dict mapping old Unity name -> new Unity name
+        """
+        mapping = {}
+        for f in self.fields:
+            for former in f.former_names:
+                mapping[former] = f.unity_name
+        return mapping
+
+    def is_obsolete_field(self, unity_name: str) -> bool:
+        """Check if a field name is obsolete (not in current script).
+
+        Note: FormerlySerializedAs names are considered obsolete.
+        """
+        valid_names = self.get_valid_field_names()
+        return unity_name not in valid_names
 
 
 # Regex patterns for C# parsing
@@ -98,6 +135,13 @@ NON_SERIALIZED_ATTR = re.compile(r"\[\s*(?:System\.)?NonSerialized\s*\]", re.IGN
 
 # Match HideInInspector attribute (still serialized, just hidden)
 HIDE_IN_INSPECTOR_ATTR = re.compile(r"\[\s*HideInInspector\s*\]", re.IGNORECASE)
+
+# Match FormerlySerializedAs attribute - captures the old field name
+# Example: [FormerlySerializedAs("oldName")] or [UnityEngine.Serialization.FormerlySerializedAs("oldName")]
+FORMERLY_SERIALIZED_AS_ATTR = re.compile(
+    r"\[\s*(?:UnityEngine\.Serialization\.)?FormerlySerializedAs\s*\(\s*\"(\w+)\"\s*\)\s*\]",
+    re.IGNORECASE
+)
 
 
 def parse_script(content: str, path: Path | None = None) -> ScriptInfo | None:
@@ -174,9 +218,13 @@ def parse_script(content: str, path: Path | None = None) -> ScriptInfo | None:
             # Calculate line number
             line_num = content[:class_start + match.start()].count("\n") + 1
 
+            # Extract FormerlySerializedAs names
+            former_names = FORMERLY_SERIALIZED_AS_ATTR.findall(attrs)
+
             info.fields.append(SerializedField.from_field_name(
                 name=field_name,
                 field_type=field_type,
+                former_names=former_names,
                 is_public=is_public,
                 has_serialize_field=has_serialize_field,
                 line_number=line_num,

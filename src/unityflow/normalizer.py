@@ -61,6 +61,7 @@ class UnityPrefabNormalizer:
         normalize_quaternions: bool = True,
         float_precision: int = 6,
         reorder_script_fields: bool = False,
+        remove_obsolete_fields: bool = False,
         project_root: str | Path | None = None,
     ):
         """Initialize the normalizer.
@@ -73,6 +74,7 @@ class UnityPrefabNormalizer:
             normalize_quaternions: Ensure quaternion w >= 0
             float_precision: Decimal places for float normalization (if not using hex)
             reorder_script_fields: Reorder MonoBehaviour fields according to C# script
+            remove_obsolete_fields: Remove fields not in script and merge FormerlySerializedAs
             project_root: Unity project root for script resolution (auto-detected if None)
         """
         self.sort_documents = sort_documents
@@ -82,8 +84,10 @@ class UnityPrefabNormalizer:
         self.normalize_quaternions = normalize_quaternions
         self.float_precision = float_precision
         self.reorder_script_fields = reorder_script_fields
+        self.remove_obsolete_fields = remove_obsolete_fields
         self.project_root = Path(project_root) if project_root else None
         self._script_cache: Any = None  # Lazy initialized ScriptFieldCache
+        self._script_info_cache: dict[str, Any] = {}  # Cache for ScriptInfo by GUID
         self._guid_index: Any = None  # Lazy initialized GUIDIndex
 
     def normalize_file(self, input_path: str | Path, output_path: str | Path | None = None) -> str:
@@ -98,8 +102,8 @@ class UnityPrefabNormalizer:
         """
         input_path = Path(input_path)
 
-        # Auto-detect project root if not specified and reorder_script_fields is enabled
-        if self.reorder_script_fields and self.project_root is None:
+        # Auto-detect project root if not specified and script processing is enabled
+        if (self.reorder_script_fields or self.remove_obsolete_fields) and self.project_root is None:
             from unityflow.asset_tracker import find_unity_project_root
             self.project_root = find_unity_project_root(input_path)
 
@@ -137,9 +141,15 @@ class UnityPrefabNormalizer:
         if self.sort_modifications and "m_Modification" in content:
             self._sort_modifications(content["m_Modification"])
 
-        # Reorder MonoBehaviour fields according to C# script declaration order
-        if self.reorder_script_fields and obj.class_id == 114:  # MonoBehaviour
-            self._reorder_monobehaviour_fields(obj)
+        # Process MonoBehaviour fields
+        if obj.class_id == 114:  # MonoBehaviour
+            # Remove obsolete fields and merge FormerlySerializedAs renamed fields
+            if self.remove_obsolete_fields:
+                self._cleanup_obsolete_fields(obj)
+
+            # Reorder MonoBehaviour fields according to C# script declaration order
+            if self.reorder_script_fields:
+                self._reorder_monobehaviour_fields(obj)
 
         # Recursively normalize the data
         self._normalize_value(obj.data, parent_key=None)
@@ -175,6 +185,112 @@ class UnityPrefabNormalizer:
         # Replace content in place
         content.clear()
         content.update(reordered)
+
+    def _cleanup_obsolete_fields(self, obj: UnityYAMLObject) -> None:
+        """Remove obsolete fields and merge FormerlySerializedAs renamed fields.
+
+        Args:
+            obj: The MonoBehaviour object to clean up
+        """
+        content = obj.get_content()
+        if content is None:
+            return
+
+        # Get script reference
+        script_ref = content.get("m_Script")
+        if not isinstance(script_ref, dict):
+            return
+
+        script_guid = script_ref.get("guid")
+        if not script_guid:
+            return
+
+        # Get script info
+        script_info = self._get_script_info(script_guid)
+        if script_info is None:
+            return
+
+        # Get valid field names and rename mapping
+        valid_names = script_info.get_valid_field_names()
+        rename_mapping = script_info.get_rename_mapping()
+
+        # Unity standard fields that should never be removed
+        unity_standard_fields = {
+            "m_ObjectHideFlags",
+            "m_CorrespondingSourceObject",
+            "m_PrefabInstance",
+            "m_PrefabAsset",
+            "m_GameObject",
+            "m_Enabled",
+            "m_EditorHideFlags",
+            "m_Script",
+            "m_Name",
+            "m_EditorClassIdentifier",
+        }
+
+        # First pass: handle FormerlySerializedAs renames
+        # If old name exists and new name doesn't, copy old value to new name
+        for old_name, new_name in rename_mapping.items():
+            if old_name in content and new_name not in content:
+                content[new_name] = content[old_name]
+
+        # Second pass: collect fields to remove
+        fields_to_remove = []
+        for field_name in content.keys():
+            # Skip Unity standard fields
+            if field_name in unity_standard_fields:
+                continue
+
+            # Check if field is valid (in current script) or is an old renamed field
+            if field_name not in valid_names:
+                # It's either an obsolete field or a FormerlySerializedAs old name
+                fields_to_remove.append(field_name)
+
+        # Remove obsolete fields
+        for field_name in fields_to_remove:
+            del content[field_name]
+
+    def _get_script_info(self, script_guid: str):
+        """Get script info for a script by GUID (with caching).
+
+        Args:
+            script_guid: The GUID of the script
+
+        Returns:
+            ScriptInfo object or None if not found
+        """
+        # Check cache first
+        if script_guid in self._script_info_cache:
+            return self._script_info_cache[script_guid]
+
+        if self.project_root is None:
+            return None
+
+        # Lazy initialize GUID index
+        if self._guid_index is None:
+            from unityflow.asset_tracker import build_guid_index
+            self._guid_index = build_guid_index(self.project_root)
+
+        # Find script path
+        script_path = self._guid_index.get_path(script_guid)
+        if script_path is None:
+            self._script_info_cache[script_guid] = None
+            return None
+
+        # Resolve to absolute path
+        if not script_path.is_absolute():
+            script_path = self.project_root / script_path
+
+        # Check if it's a C# script
+        if script_path.suffix.lower() != ".cs":
+            self._script_info_cache[script_guid] = None
+            return None
+
+        # Parse script
+        from unityflow.script_parser import parse_script_file
+        result = parse_script_file(script_path)
+        self._script_info_cache[script_guid] = result
+        return result
 
     def _get_script_field_order(self, script_guid: str) -> list[str] | None:
         """Get field order for a script by GUID (with caching).
