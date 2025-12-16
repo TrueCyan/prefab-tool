@@ -589,7 +589,7 @@ def validate(
     "--find-script",
     type=str,
     default=None,
-    help="Find GameObjects with MonoBehaviour by script GUID",
+    help="Find GameObjects with specific MonoBehaviour script",
 )
 @click.option(
     "--format",
@@ -633,8 +633,8 @@ def query(
         unityflow query Scene.unity --find-component "Light2D"
         unityflow query Scene.unity --find-component "SpriteRenderer"
 
-        # Find GameObjects with MonoBehaviour by script GUID
-        unityflow query Scene.unity --find-script "abc123def456..."
+        # Find GameObjects with specific MonoBehaviour script
+        unityflow query Scene.unity --find-script PlayerController
     """
     from unityflow.parser import UnityYAMLDocument, CLASS_IDS
     from unityflow.query import query_path as do_query
@@ -683,15 +683,21 @@ def query(
 
     # Handle find-script query
     if find_script is not None:
-        results = _find_by_script(doc, find_script)
+        # Resolve script name to GUID if needed
+        script_guid, error = _resolve_script_to_guid(find_script, file)
+        if error:
+            # If can't resolve, try using it directly (might be partial GUID)
+            script_guid = find_script
+
+        results = _find_by_script(doc, script_guid)
         if not results:
-            click.echo(f"No GameObjects found with script GUID: {find_script}")
+            click.echo(f"No GameObjects found with script: {find_script}")
             return
 
         if output_format == "json":
             click.echo(json.dumps(results, indent=2))
         else:
-            click.echo(f"Found {len(results)} GameObject(s) with script '{find_script[:16]}...':")
+            click.echo(f"Found {len(results)} GameObject(s) with script '{find_script}':")
             for r in results:
                 click.echo(f"  {r['name']} (fileID: {r['fileID']})")
                 click.echo(f"    MonoBehaviour fileID: {r['componentFileID']}")
@@ -3660,6 +3666,64 @@ def _validate_field_value(field_name: str, value: any) -> tuple[bool, str | None
     return True, None
 
 
+def _resolve_script_to_guid(script_ref: str, file_path: Path) -> tuple[str | None, str | None]:
+    """Resolve a script reference (GUID or name) to a GUID.
+
+    Args:
+        script_ref: Either a 32-char hex GUID or a script class name
+        file_path: Path to the Unity file being edited (for project root detection)
+
+    Returns:
+        Tuple of (guid, error_message). If successful, error_message is None.
+    """
+    import re
+
+    # Check if it's already a GUID (32 hex characters)
+    if re.match(r"^[a-f0-9]{32}$", script_ref, re.IGNORECASE):
+        return script_ref, None
+
+    # It's a script name - search for matching .cs file
+    from unityflow.asset_tracker import find_unity_project_root
+
+    project_root = find_unity_project_root(file_path)
+    if not project_root:
+        return None, f"Unity 프로젝트 루트를 찾을 수 없습니다."
+
+    # Search for matching .cs files
+    script_name = script_ref
+    if script_name.endswith(".cs"):
+        script_name = script_name[:-3]
+
+    # Search in Assets folder
+    assets_dir = project_root / "Assets"
+    if not assets_dir.exists():
+        return None, f"Assets 폴더를 찾을 수 없습니다: {assets_dir}"
+
+    # Find all matching .cs files
+    matches: list[tuple[Path, str]] = []
+    guid_pattern = re.compile(r"^guid:\s*([a-f0-9]{32})\s*$", re.MULTILINE)
+
+    for cs_file in assets_dir.rglob(f"{script_name}.cs"):
+        meta_file = cs_file.with_suffix(".cs.meta")
+        if meta_file.exists():
+            try:
+                meta_content = meta_file.read_text(encoding="utf-8")
+                guid_match = guid_pattern.search(meta_content)
+                if guid_match:
+                    matches.append((cs_file, guid_match.group(1)))
+            except Exception:
+                pass
+
+    if not matches:
+        return None, f"스크립트를 찾을 수 없습니다: '{script_name}'. Assets 폴더에 {script_name}.cs 파일이 있는지 확인하세요."
+
+    if len(matches) > 1:
+        paths = "\n  ".join(str(m[0].relative_to(project_root)) for m in matches)
+        return None, f"'{script_name}' 이름의 스크립트가 여러 개 있습니다:\n  {paths}\n정확한 경로를 지정하세요."
+
+    return matches[0][1], None
+
+
 @main.command(name="add-component")
 @click.argument("file", type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3679,10 +3743,10 @@ def _validate_field_value(field_name: str, value: any) -> tuple[bool, str | None
 )
 @click.option(
     "--script",
-    "script_guid",
+    "script_ref",
     type=str,
     default=None,
-    help="GUID of the MonoBehaviour script to add",
+    help="Script name to add (e.g., 'PlayerController')",
 )
 @click.option(
     "--props",
@@ -3700,7 +3764,7 @@ def add_component(
     file: Path,
     target_path: str,
     component_type: str | None,
-    script_guid: str | None,
+    script_ref: str | None,
     props: str | None,
     output: Path | None,
 ) -> None:
@@ -3723,8 +3787,8 @@ def add_component(
         # When multiple GameObjects have the same path, use index
         unityflow add-component Scene.unity --to "Canvas/Panel/Button[1]" --type Image
 
-        # Add a custom MonoBehaviour with script GUID
-        unityflow add-component Scene.unity --to "Player" --script "abc123def456..."
+        # Add a custom MonoBehaviour by script name
+        unityflow add-component Scene.unity --to "Player" --script PlayerController
 
         # Add with properties
         unityflow add-component Scene.unity --to "Canvas/Panel" --type Image \\
@@ -3736,13 +3800,21 @@ def add_component(
     )
     import json
 
-    if not component_type and not script_guid:
+    if not component_type and not script_ref:
         click.echo("Error: Specify --type or --script", err=True)
         sys.exit(1)
 
-    if component_type and script_guid:
+    if component_type and script_ref:
         click.echo("Error: Cannot use both --type and --script", err=True)
         sys.exit(1)
+
+    # Resolve script reference to GUID if specified
+    script_guid = None
+    if script_ref:
+        script_guid, error = _resolve_script_to_guid(script_ref, file)
+        if error:
+            click.echo(f"Error: {error}", err=True)
+            sys.exit(1)
 
     try:
         doc = UnityYAMLDocument.load(file)

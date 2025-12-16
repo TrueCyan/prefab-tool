@@ -491,7 +491,7 @@ class TestAddComponentCommand:
                 "--to",
                 "BasicPrefab",  # GameObject path
                 "--script",
-                "abc123def456",
+                "abc123def456abc123def456abc12345",  # 32-char GUID
             ],
         )
 
@@ -499,7 +499,7 @@ class TestAddComponentCommand:
         assert "Added MonoBehaviour component" in result.output
         content = test_file.read_text()
         assert "MonoBehaviour" in content
-        assert "abc123def456" in content
+        assert "abc123def456abc123def456abc12345" in content
 
     def test_add_component_requires_type_or_script(self, runner, tmp_path):
         """Test that add-component requires --type or --script."""
