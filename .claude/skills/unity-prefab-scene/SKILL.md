@@ -136,6 +136,13 @@ unityflow add-component Scene.unity --to "Canvas/Panel/Button" --type Image
 # 커스텀 스크립트 추가 (스크립트 이름으로 지정)
 unityflow add-component Scene.unity --to "Player" --script PlayerController \
     --props '{"speed": 5.0, "health": 100}'
+
+# 컴포넌트 삭제 (경로로 대상 지정)
+unityflow delete-component Scene.unity --from "Player" --type SpriteRenderer
+unityflow delete-component Scene.unity --from "Canvas/Panel/Button" --type Image
+
+# 커스텀 스크립트 삭제 (스크립트 이름으로 지정)
+unityflow delete-component Scene.unity --from "Player" --script PlayerController
 ```
 
 ### 에셋 연결 (@ 접두사)
@@ -370,6 +377,29 @@ unityflow add-component Scene.unity --to "Player" --script PlayerController
 | **텍스트** | TextMeshProUGUI, TMP_InputField |
 | **시스템** | EventSystem, InputSystemUIInputModule |
 | **렌더링** | Light2D |
+
+---
+
+## 컴포넌트 삭제 (delete-component)
+
+`--from`으로 대상 GameObject 경로를 지정하고 `--type`으로 컴포넌트를 삭제합니다.
+
+```bash
+# 기본 사용
+unityflow delete-component Scene.unity --from "Player" --type SpriteRenderer
+unityflow delete-component Scene.unity --from "Canvas/Panel/Button" --type Image
+
+# 같은 경로에 동일 이름이 여러 개일 때 인덱스 사용
+unityflow delete-component Scene.unity --from "Canvas/Panel/Button[1]" --type Image
+
+# 커스텀 스크립트 삭제 (이름으로 지정)
+unityflow delete-component Scene.unity --from "Player" --script PlayerController
+
+# 확인 없이 삭제
+unityflow delete-component Scene.unity --from "Player" --type SpriteRenderer --force
+```
+
+**참고:** Transform과 RectTransform은 삭제할 수 없습니다 (GameObject의 필수 컴포넌트).
 
 ---
 

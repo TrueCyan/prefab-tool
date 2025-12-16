@@ -4168,16 +4168,29 @@ def delete_object(
 @main.command(name="delete-component")
 @click.argument("file", type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "--id",
-    "-i",
-    "component_id",
-    type=int,
+    "--from",
+    "-f",
+    "target_path",
+    type=str,
     required=True,
-    help="FileID of the component to delete",
+    help="Target GameObject path (e.g., 'Canvas/Panel/Button')",
+)
+@click.option(
+    "--type",
+    "component_type",
+    type=click.Choice(ALL_COMPONENT_TYPES),
+    default=None,
+    help="Component type to delete (built-in or package component)",
+)
+@click.option(
+    "--script",
+    "script_ref",
+    type=str,
+    default=None,
+    help="Script name to delete (e.g., 'PlayerController')",
 )
 @click.option(
     "--force",
-    "-f",
     is_flag=True,
     help="Delete without confirmation",
 )
@@ -4189,23 +4202,51 @@ def delete_object(
 )
 def delete_component(
     file: Path,
-    component_id: int,
+    target_path: str,
+    component_type: str | None,
+    script_ref: str | None,
     force: bool,
     output: Path | None,
 ) -> None:
     """Delete a component from a Unity YAML file.
 
-    Removes the component and updates the parent GameObject's component list.
+    Removes the component from the specified GameObject.
+    Requires either --type for built-in/package components or --script for custom MonoBehaviour.
 
     Examples:
 
-        # Delete a component
-        unityflow delete-component Scene.unity --id 67890
+        # Delete a built-in component
+        unityflow delete-component Scene.unity --from "Player" --type SpriteRenderer
+
+        # Delete a package component
+        unityflow delete-component Scene.unity --from "Canvas/Panel/Button" --type Image
+
+        # When multiple GameObjects have the same path, use index
+        unityflow delete-component Scene.unity --from "Canvas/Panel/Button[1]" --type Image
+
+        # Delete a custom MonoBehaviour by script name
+        unityflow delete-component Scene.unity --from "Player" --script PlayerController
 
         # Delete without confirmation
-        unityflow delete-component Scene.unity --id 67890 --force
+        unityflow delete-component Scene.unity --from "Player" --type SpriteRenderer --force
     """
     from unityflow.parser import UnityYAMLDocument
+
+    if not component_type and not script_ref:
+        click.echo("Error: Specify --type or --script", err=True)
+        sys.exit(1)
+
+    if component_type and script_ref:
+        click.echo("Error: Cannot use both --type and --script", err=True)
+        sys.exit(1)
+
+    # Resolve script reference to GUID if specified
+    script_guid = None
+    if script_ref:
+        script_guid, error = _resolve_script_to_guid(script_ref, file)
+        if error:
+            click.echo(f"Error: {error}", err=True)
+            sys.exit(1)
 
     try:
         doc = UnityYAMLDocument.load(file)
@@ -4215,39 +4256,108 @@ def delete_component(
 
     output_path = output or file
 
-    # Find component
-    obj = doc.get_by_file_id(component_id)
-    if obj is None:
-        click.echo(f"Error: Component not found", err=True)
+    # Resolve target GameObject by path
+    target_id, error = _resolve_gameobject_by_path(doc, target_path)
+    if error:
+        click.echo(f"Error: {error}", err=True)
         sys.exit(1)
 
-    if obj.class_id == 1:
-        click.echo(f"Error: Target is a GameObject, not a component", err=True)
-        click.echo("Use delete-object for GameObjects", err=True)
+    target_go = doc.get_by_file_id(target_id)
+    if target_go is None or target_go.class_id != 1:
+        click.echo(f"Error: Failed to resolve GameObject at '{target_path}'", err=True)
         sys.exit(1)
 
-    # Find and update the parent GameObject
-    content = obj.get_content()
-    if content and "m_GameObject" in content:
-        parent_go_id = content["m_GameObject"].get("fileID", 0)
-        parent_go = doc.get_by_file_id(parent_go_id)
-        if parent_go:
-            go_content = parent_go.get_content()
-            if go_content and "m_Component" in go_content:
-                go_content["m_Component"] = [
-                    c for c in go_content["m_Component"]
-                    if c.get("component", {}).get("fileID") != component_id
-                ]
+    # Find the component to delete
+    go_content = target_go.get_content()
+    if not go_content or "m_Component" not in go_content:
+        click.echo(f"Error: GameObject has no components", err=True)
+        sys.exit(1)
+
+    component_to_delete = None
+    component_id = None
+
+    # Get class ID for built-in components
+    builtin_class_ids = {
+        "Transform": 4,
+        "RectTransform": 224,
+        "SpriteRenderer": 212,
+        "Camera": 20,
+        "Light": 108,
+        "AudioSource": 82,
+        "BoxCollider2D": 61,
+        "CircleCollider2D": 58,
+        "Rigidbody2D": 50,
+    }
+
+    for comp_entry in go_content["m_Component"]:
+        comp_ref = comp_entry.get("component", {})
+        comp_file_id = comp_ref.get("fileID", 0)
+        if not comp_file_id:
+            continue
+
+        comp_obj = doc.get_by_file_id(comp_file_id)
+        if comp_obj is None:
+            continue
+
+        if script_guid:
+            # Looking for MonoBehaviour with specific script GUID
+            if comp_obj.class_id == 114:  # MonoBehaviour
+                comp_content = comp_obj.get_content()
+                if comp_content:
+                    script_ref_data = comp_content.get("m_Script", {})
+                    if script_ref_data.get("guid") == script_guid:
+                        component_to_delete = comp_obj
+                        component_id = comp_file_id
+                        break
+        elif component_type in PACKAGE_COMPONENT_GUIDS:
+            # Looking for package component (MonoBehaviour with known GUID)
+            if comp_obj.class_id == 114:  # MonoBehaviour
+                comp_content = comp_obj.get_content()
+                if comp_content:
+                    script_ref_data = comp_content.get("m_Script", {})
+                    if script_ref_data.get("guid") == PACKAGE_COMPONENT_GUIDS[component_type]:
+                        component_to_delete = comp_obj
+                        component_id = comp_file_id
+                        break
+        else:
+            # Looking for built-in component by class ID
+            expected_class_id = builtin_class_ids.get(component_type)
+            if expected_class_id and comp_obj.class_id == expected_class_id:
+                component_to_delete = comp_obj
+                component_id = comp_file_id
+                break
+
+    if component_to_delete is None:
+        if script_ref:
+            click.echo(f"Error: MonoBehaviour '{script_ref}' not found on '{target_path}'", err=True)
+        else:
+            click.echo(f"Error: Component '{component_type}' not found on '{target_path}'", err=True)
+        sys.exit(1)
+
+    # Prevent deleting Transform/RectTransform
+    if component_to_delete.class_id in (4, 224):
+        click.echo(f"Error: Cannot delete Transform or RectTransform", err=True)
+        sys.exit(1)
 
     if not force:
-        click.echo(f"Will delete {obj.class_name}")
+        display_name = script_ref if script_ref else component_type
+        click.echo(f"Will delete {display_name} from '{target_path}'")
         if not click.confirm("Continue?"):
             click.echo("Aborted")
             return
 
+    # Update GameObject's component list
+    go_content["m_Component"] = [
+        c for c in go_content["m_Component"]
+        if c.get("component", {}).get("fileID") != component_id
+    ]
+
+    # Remove the component object
     doc.remove_object(component_id)
     doc.save(output_path)
-    click.echo(f"Deleted component {obj.class_name}")
+
+    display_name = script_ref if script_ref else component_type
+    click.echo(f"Deleted {display_name} from '{target_path}'")
 
     if output:
         click.echo(f"Saved to: {output}")
