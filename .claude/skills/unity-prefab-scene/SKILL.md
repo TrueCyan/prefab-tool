@@ -509,24 +509,18 @@ doc.save("output.prefab")  # 또는 .unity, .asset
 
 ## 컴포넌트 추가 (add-component)
 
-`--type` 옵션으로 컴포넌트를 추가합니다.
+`--to`로 대상 GameObject 경로를 지정하고 `--type`으로 컴포넌트를 추가합니다.
 
 ```bash
-# 빌트인 컴포넌트
-unityflow add-component Scene.unity --to 12345 --type SpriteRenderer
-unityflow add-component Scene.unity --to 12345 --type Camera
+# 기본 사용
+unityflow add-component Scene.unity --to "Player" --type SpriteRenderer
+unityflow add-component Scene.unity --to "Canvas/Panel/Button" --type Image
 
-# UI 컴포넌트
-unityflow add-component Scene.unity --to 12345 --type Image
-unityflow add-component Scene.unity --to 12345 --type Button
-unityflow add-component Scene.unity --to 12345 --type TextMeshProUGUI
-
-# 레이아웃 컴포넌트
-unityflow add-component Scene.unity --to 12345 --type VerticalLayoutGroup
-unityflow add-component Scene.unity --to 12345 --type ContentSizeFitter
+# 같은 경로에 동일 이름이 여러 개일 때 인덱스 사용
+unityflow add-component Scene.unity --to "Canvas/Panel/Button[1]" --type Image
 
 # 속성과 함께 추가
-unityflow add-component Scene.unity --to 12345 --type Image \
+unityflow add-component Scene.unity --to "Canvas/Panel" --type Image \
     --props '{"m_Color": {"r": 1, "g": 0, "b": 0, "a": 1}}'
 ```
 
@@ -546,7 +540,7 @@ unityflow add-component Scene.unity --to 12345 --type Image \
 프로젝트 스크립트는 `--script` 옵션으로 GUID를 지정합니다:
 
 ```bash
-unityflow add-component Scene.unity --to 12345 --script "abc123def456..."
+unityflow add-component Scene.unity --to "Player" --script "abc123def456..."
 ```
 
 스크립트 GUID 조회:

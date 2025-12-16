@@ -467,7 +467,7 @@ class TestAddComponentCommand:
                 "add-component",
                 str(test_file),
                 "--to",
-                "100000",  # GameObject fileID from basic_prefab
+                "BasicPrefab",  # GameObject path
                 "--type",
                 "SpriteRenderer",
             ],
@@ -490,7 +490,7 @@ class TestAddComponentCommand:
                 "add-component",
                 str(test_file),
                 "--to",
-                "100000",
+                "BasicPrefab",  # GameObject path
                 "--script",
                 "abc123def456",
             ],
@@ -510,7 +510,7 @@ class TestAddComponentCommand:
 
         result = runner.invoke(
             main,
-            ["add-component", str(test_file), "--to", "100000"],
+            ["add-component", str(test_file), "--to", "BasicPrefab"],
         )
 
         assert result.exit_code != 0

@@ -776,6 +776,103 @@ def query(
                 click.echo(f"{r.path}: {r.value}")
 
 
+def _resolve_gameobject_by_path(
+    doc: "UnityYAMLDocument",
+    path_spec: str,
+) -> tuple[int | None, str | None]:
+    """Resolve a GameObject by path specification.
+
+    Args:
+        doc: The Unity YAML document
+        path_spec: Path like "Canvas/Panel/Button" or "Canvas/Panel/Button[1]"
+
+    Returns:
+        Tuple of (fileID, error_message). If successful, error_message is None.
+        If failed, fileID is None and error_message contains the error.
+    """
+    import re
+
+    # Parse path and optional index
+    index_match = re.match(r"^(.+)\[(\d+)\]$", path_spec)
+    if index_match:
+        path = index_match.group(1)
+        index = int(index_match.group(2))
+    else:
+        path = path_spec
+        index = None
+
+    # Build transform hierarchy
+    transforms: dict[int, dict] = {}  # transform_id -> {gameObject, parent}
+    go_names: dict[int, str] = {}  # go_id -> name
+    go_transforms: dict[int, int] = {}  # go_id -> transform_id
+
+    for obj in doc.objects:
+        if obj.class_id == 4 or obj.class_id == 224:  # Transform or RectTransform
+            content = obj.get_content()
+            if content:
+                go_ref = content.get("m_GameObject", {})
+                go_id = go_ref.get("fileID", 0) if isinstance(go_ref, dict) else 0
+                father = content.get("m_Father", {})
+                father_id = father.get("fileID", 0) if isinstance(father, dict) else 0
+                transforms[obj.file_id] = {
+                    "gameObject": go_id,
+                    "parent": father_id,
+                }
+                if go_id:
+                    go_transforms[go_id] = obj.file_id
+
+    for obj in doc.objects:
+        if obj.class_id == 1:  # GameObject
+            content = obj.get_content()
+            if content:
+                go_names[obj.file_id] = content.get("m_Name", "")
+
+    # Build path for each GameObject
+    def build_path(transform_id: int, visited: set[int]) -> str:
+        if transform_id in visited or transform_id not in transforms:
+            return ""
+        visited.add(transform_id)
+
+        t = transforms[transform_id]
+        name = go_names.get(t["gameObject"], "")
+
+        if t["parent"] == 0:
+            return name
+        else:
+            parent_path = build_path(t["parent"], visited)
+            if parent_path:
+                return f"{parent_path}/{name}"
+            return name
+
+    # Find all GameObjects matching the path
+    matches: list[tuple[int, str]] = []  # (go_id, full_path)
+    for go_id, transform_id in go_transforms.items():
+        full_path = build_path(transform_id, set())
+        if full_path == path:
+            matches.append((go_id, full_path))
+
+    if not matches:
+        return None, f"GameObject not found at path '{path}'"
+
+    if len(matches) == 1:
+        return matches[0][0], None
+
+    # Multiple matches
+    if index is not None:
+        if index < len(matches):
+            return matches[index][0], None
+        else:
+            return None, f"Index [{index}] out of range. Found {len(matches)} GameObjects at path '{path}'"
+
+    # No index specified, show options
+    error_lines = [f"Multiple GameObjects at path '{path}':"]
+    for i, (go_id, _) in enumerate(matches):
+        error_lines.append(f"  [{i}] fileID: {go_id}")
+    error_lines.append(f"")
+    error_lines.append(f"Use index: --to \"{path}[0]\"")
+    return None, "\n".join(error_lines)
+
+
 def _find_by_name(doc: "UnityYAMLDocument", pattern: str) -> list[dict]:
     """Find GameObjects by name pattern."""
     import fnmatch
@@ -3258,10 +3355,10 @@ ALL_COMPONENT_TYPES = BUILTIN_COMPONENT_TYPES + list(PACKAGE_COMPONENT_GUIDS.key
 @click.option(
     "--to",
     "-t",
-    "target_id",
-    type=int,
+    "target_path",
+    type=str,
     required=True,
-    help="Target GameObject fileID",
+    help="Target GameObject path (e.g., 'Canvas/Panel/Button')",
 )
 @click.option(
     "--type",
@@ -3291,7 +3388,7 @@ ALL_COMPONENT_TYPES = BUILTIN_COMPONENT_TYPES + list(PACKAGE_COMPONENT_GUIDS.key
 )
 def add_component(
     file: Path,
-    target_id: int,
+    target_path: str,
     component_type: str | None,
     script_guid: str | None,
     props: str | None,
@@ -3308,22 +3405,19 @@ def add_component(
     Examples:
 
         # Add a built-in component
-        unityflow add-component Scene.unity --to 12345 --type SpriteRenderer
+        unityflow add-component Scene.unity --to "Player" --type SpriteRenderer
 
-        # Add a package component (UI Image)
-        unityflow add-component Scene.unity --to 12345 --type Image
+        # Add to nested GameObject
+        unityflow add-component Scene.unity --to "Canvas/Panel/Button" --type Image
 
-        # Add TextMeshProUGUI
-        unityflow add-component Scene.unity --to 12345 --type TextMeshProUGUI
-
-        # Add Light2D (URP)
-        unityflow add-component Scene.unity --to 12345 --type Light2D
+        # When multiple GameObjects have the same path, use index
+        unityflow add-component Scene.unity --to "Canvas/Panel/Button[1]" --type Image
 
         # Add a custom MonoBehaviour with script GUID
-        unityflow add-component Scene.unity --to 12345 --script "abc123def456..."
+        unityflow add-component Scene.unity --to "Player" --script "abc123def456..."
 
         # Add with properties
-        unityflow add-component Scene.unity --to 12345 --type Image \\
+        unityflow add-component Scene.unity --to "Canvas/Panel" --type Image \\
             --props '{"m_Color": {"r": 1, "g": 0, "b": 0, "a": 1}}'
     """
     from unityflow.parser import (
@@ -3357,15 +3451,15 @@ def add_component(
             click.echo(f"Error: Invalid JSON for --props: {e}", err=True)
             sys.exit(1)
 
-    # Find target GameObject
-    target_go = doc.get_by_file_id(target_id)
-    if target_go is None:
-        click.echo(f"Error: GameObject with fileID {target_id} not found", err=True)
+    # Resolve target GameObject by path
+    target_id, error = _resolve_gameobject_by_path(doc, target_path)
+    if error:
+        click.echo(f"Error: {error}", err=True)
         sys.exit(1)
 
-    if target_go.class_id != 1:
-        click.echo(f"Error: fileID {target_id} is not a GameObject", err=True)
-        click.echo(f"  Found: {target_go.class_name}", err=True)
+    target_go = doc.get_by_file_id(target_id)
+    if target_go is None or target_go.class_id != 1:
+        click.echo(f"Error: Failed to resolve GameObject at '{target_path}'", err=True)
         sys.exit(1)
 
     component_id = doc.generate_unique_file_id()
@@ -3409,7 +3503,7 @@ def add_component(
 
     doc.save(output_path)
     click.echo(f"  Component fileID: {component_id}")
-    click.echo(f"  Target GameObject: {target_id}")
+    click.echo(f"  Target: {target_path}")
 
     if output:
         click.echo(f"Saved to: {output}")
