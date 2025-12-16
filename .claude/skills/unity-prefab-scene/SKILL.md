@@ -437,40 +437,6 @@ unityflow set Player.prefab \
 # 결과: {"fileID": 8300000, "guid": "...", "type": 3}
 ```
 
-### 에셋 타입별 자동 fileID
-
-| 에셋 타입 | @ 접두사 예시 | 자동 fileID |
-|----------|---------------|------------|
-| AudioClip | `@Assets/Audio/jump.wav` | 8300000 |
-| ScriptableObject | `@Assets/Data/Config.asset` | 11400000 |
-| Prefab | `@Assets/Prefabs/Enemy.prefab` | 프리팹에서 추출 |
-| Texture2D/Sprite | `@Assets/Sprites/icon.png` | 21300000 |
-| Sprite (Multiple) | `@Assets/Sprites/atlas.png:idle_0` | meta에서 추출 |
-| Material | `@Assets/Materials/Custom.mat` | 2100000 |
-| Script | `@Assets/Scripts/Player.cs` | 11500000 |
-
-### 직접 지정 방식 (참고용)
-
-`@` 접두사를 사용할 수 없는 경우 직접 참조를 지정할 수 있습니다:
-
-```json
-// AudioClip
-{"fileID": 8300000, "guid": "64f4d9eeadd03cf428c0a0b29e82648a", "type": 3}
-
-// ScriptableObject
-{"fileID": 11400000, "guid": "5b6d5b5cf85254e4b9a4133a62f8488e", "type": 2}
-
-// Prefab (fileID는 프리팹마다 다름!)
-{"fileID": 3538220432101258543, "guid": "abd4ca9175669424ea5690fa080e9251", "type": 3}
-```
-
-### GUID 추출 방법
-
-```bash
-# .meta 파일에서 추출
-grep "guid:" "Assets/Audio/sound.wav.meta"
-```
-
 ---
 
 ## ScriptableObject 편집
