@@ -1,6 +1,6 @@
 # 예시 스크립트
 
-이 디렉토리에는 prefab-tool을 사용한 프리팹/씬 편집 예시 스크립트들이 있습니다.
+이 디렉토리에는 unityflow을 사용한 프리팹/씬 편집 예시 스크립트들이 있습니다.
 
 ## 스크립트 목록
 
@@ -62,21 +62,21 @@ python analyze_prefab.py find Player.prefab "Button"
 
 ```bash
 # 파일 분석
-prefab-tool stats Player.prefab
-prefab-tool query Player.prefab
-prefab-tool validate Player.prefab
+unityflow stats Player.prefab
+unityflow query Player.prefab
+unityflow validate Player.prefab
 
 # JSON 변환
-prefab-tool export Player.prefab -o player.json
-prefab-tool import player.json -o Player.prefab
+unityflow export Player.prefab -o player.json
+unityflow import player.json -o Player.prefab
 
 # 값 수정
-prefab-tool set Player.prefab --path "gameObjects/*/name" --value '"NewName"'
+unityflow set Player.prefab --path "gameObjects/*/name" --value '"NewName"'
 
 # 정규화
-prefab-tool normalize Player.prefab
+unityflow normalize Player.prefab
 
 # 의존성
-prefab-tool deps Player.prefab
-prefab-tool find-refs Textures/icon.png
+unityflow deps Player.prefab
+unityflow find-refs Textures/icon.png
 ```

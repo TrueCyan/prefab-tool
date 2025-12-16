@@ -1,10 +1,10 @@
-# prefab-tool 개발 문서
+# unityflow 개발 문서
 
 ## 아키텍처
 
 ```
-prefab-tool/
-├── src/prefab_tool/
+unityflow/
+├── src/unityflow/
 │   ├── parser.py        # Unity YAML 파서, 프리팹 생성 API
 │   ├── fast_parser.py   # rapidyaml 기반 고속 파싱
 │   ├── normalizer.py    # 결정적 정규화
@@ -29,7 +29,7 @@ prefab-tool/
 ### 프리팹 프로그래매틱 생성
 
 ```python
-from prefab_tool.parser import (
+from unityflow.parser import (
     UnityYAMLDocument,
     create_game_object,
     create_transform,
@@ -83,7 +83,7 @@ doc.save("UIPanel.prefab")
 UI RectTransform은 Unity 에디터와 파일 형식이 다릅니다:
 
 ```python
-from prefab_tool.formats import (
+from unityflow.formats import (
     RectTransformEditorValues,
     editor_to_file_values,
     file_to_editor_values,
@@ -108,7 +108,7 @@ file_vals = create_rect_transform_file_values(
 
 ### JSON 스키마
 
-`prefab-tool export` 출력 형식:
+`unityflow export` 출력 형식:
 
 ```json
 {
@@ -179,8 +179,8 @@ rapidyaml 백엔드 처리량: ~3,985 KB/s
 
 ```bash
 # 개발 환경
-git clone https://github.com/TrueCyan/prefab-tool
-cd prefab-tool
+git clone https://github.com/TrueCyan/unityflow
+cd unityflow
 pip install -e ".[dev]"
 
 # 테스트

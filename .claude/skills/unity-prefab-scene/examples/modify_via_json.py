@@ -9,8 +9,8 @@
 
 import json
 from pathlib import Path
-from prefab_tool.parser import UnityYAMLDocument
-from prefab_tool.formats import export_to_json, import_from_json, PrefabJSON
+from unityflow.parser import UnityYAMLDocument
+from unityflow.formats import export_to_json, import_from_json, PrefabJSON
 
 
 def modify_prefab_via_json(input_path: str, output_path: str) -> None:

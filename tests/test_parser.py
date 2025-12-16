@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from prefab_tool.parser import (
+from unityflow.parser import (
     UnityYAMLDocument,
     UnityYAMLObject,
     CLASS_IDS,

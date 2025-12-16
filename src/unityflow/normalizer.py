@@ -17,7 +17,7 @@ import struct
 from pathlib import Path
 from typing import Any
 
-from prefab_tool.parser import UnityYAMLDocument, UnityYAMLObject
+from unityflow.parser import UnityYAMLDocument, UnityYAMLObject
 
 
 # Properties that contain quaternion values
@@ -99,7 +99,7 @@ class UnityPrefabNormalizer:
 
         # Auto-detect project root if not specified and reorder_script_fields is enabled
         if self.reorder_script_fields and self.project_root is None:
-            from prefab_tool.asset_tracker import find_unity_project_root
+            from unityflow.asset_tracker import find_unity_project_root
             self.project_root = find_unity_project_root(input_path)
 
         doc = UnityYAMLDocument.load(input_path)
@@ -168,7 +168,7 @@ class UnityPrefabNormalizer:
             return
 
         # Reorder the content fields
-        from prefab_tool.script_parser import reorder_fields
+        from unityflow.script_parser import reorder_fields
         reordered = reorder_fields(content, field_order, unity_fields_first=True)
 
         # Replace content in place
@@ -189,8 +189,8 @@ class UnityPrefabNormalizer:
 
         # Lazy initialize cache
         if self._script_cache is None:
-            from prefab_tool.script_parser import ScriptFieldCache
-            from prefab_tool.asset_tracker import build_guid_index
+            from unityflow.script_parser import ScriptFieldCache
+            from unityflow.asset_tracker import build_guid_index
 
             # Build GUID index if not already done
             if self._guid_index is None:

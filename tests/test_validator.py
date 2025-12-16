@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from prefab_tool.validator import (
+from unityflow.validator import (
     PrefabValidator,
     validate_prefab,
     Severity,
@@ -14,7 +14,7 @@ from prefab_tool.validator import (
     fix_scene_roots,
     fix_document,
 )
-from prefab_tool.parser import UnityYAMLDocument
+from unityflow.parser import UnityYAMLDocument
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -110,7 +110,7 @@ class TestValidationResult:
 
     def test_filter_by_severity(self):
         """Test filtering issues by severity."""
-        from prefab_tool.validator import ValidationResult
+        from unityflow.validator import ValidationResult
 
         result = ValidationResult(
             path="test.prefab",

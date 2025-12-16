@@ -1,6 +1,6 @@
 ---
 name: unity-prefab-scene
-description: Unity 프리팹(.prefab), 씬(.unity), ScriptableObject(.asset) 파일을 편집합니다. prefab-tool을 사용하여 프리팹 분석, JSON 변환, GameObject 생성/수정/삭제/복제, UI 레이아웃 조정, 컴포넌트 추가/삭제, 스프라이트 연결, ScriptableObject 편집 등의 작업을 수행합니다.
+description: Unity 프리팹(.prefab), 씬(.unity), ScriptableObject(.asset) 파일을 편집합니다. unityflow을 사용하여 프리팹 분석, JSON 변환, GameObject 생성/수정/삭제/복제, UI 레이아웃 조정, 컴포넌트 추가/삭제, 스프라이트 연결, ScriptableObject 편집 등의 작업을 수행합니다.
 ---
 
 # Unity Prefab, Scene & ScriptableObject Editing Skill
@@ -9,7 +9,7 @@ Unity 프리팹(.prefab), 씬(.unity), ScriptableObject(.asset) 파일을 프로
 
 ---
 
-## ⚠️ 필수 규칙: prefab-tool 사용 의무
+## ⚠️ 필수 규칙: unityflow 사용 의무
 
 ### 절대 금지 사항
 
@@ -21,15 +21,15 @@ Unity 프리팹(.prefab), 씬(.unity), ScriptableObject(.asset) 파일을 프로
 
 ### 반드시 해야 할 것
 
-**모든 Unity 파일 조작은 `prefab-tool` CLI를 통해서만 수행합니다:**
+**모든 Unity 파일 조작은 `unityflow` CLI를 통해서만 수행합니다:**
 
-- ✅ `prefab-tool query` - 데이터 조회 및 검색
-- ✅ `prefab-tool set` - 값 수정 (단일 값, 배치 수정, 새 필드 생성)
-- ✅ `prefab-tool add-object` / `delete-object` / `clone-object` - GameObject 조작
-- ✅ `prefab-tool add-component` / `delete-component` - 컴포넌트 조작
-- ✅ `prefab-tool set --sprite` - 스프라이트 연결 (fileID 자동 감지)
-- ✅ `prefab-tool export` + `prefab-tool import` - 복잡한 구조 편집
-- ✅ `prefab-tool scan-meta` / `scan-scripts` - GUID 조회
+- ✅ `unityflow query` - 데이터 조회 및 검색
+- ✅ `unityflow set` - 값 수정 (단일 값, 배치 수정, 새 필드 생성)
+- ✅ `unityflow add-object` / `delete-object` / `clone-object` - GameObject 조작
+- ✅ `unityflow add-component` / `delete-component` - 컴포넌트 조작
+- ✅ `unityflow set --sprite` - 스프라이트 연결 (fileID 자동 감지)
+- ✅ `unityflow export` + `unityflow import` - 복잡한 구조 편집
+- ✅ `unityflow scan-meta` / `scan-scripts` - GUID 조회
 
 ### 이유
 
@@ -48,28 +48,28 @@ Unity YAML은 특수한 형식을 사용합니다:
 
 ```bash
 # 파일 통계 확인
-prefab-tool stats Player.prefab
-prefab-tool stats MainScene.unity
-prefab-tool stats GameConfig.asset
+unityflow stats Player.prefab
+unityflow stats MainScene.unity
+unityflow stats GameConfig.asset
 
 # 구조 요약 보기
-prefab-tool query Player.prefab
-prefab-tool query MainScene.unity
+unityflow query Player.prefab
+unityflow query MainScene.unity
 
 # 특정 데이터 쿼리
-prefab-tool query Player.prefab --path "gameObjects/*/name"
-prefab-tool query MainScene.unity --path "components/*/type" --format json
+unityflow query Player.prefab --path "gameObjects/*/name"
+unityflow query MainScene.unity --path "components/*/type" --format json
 
 # 이름으로 GameObject 찾기 (와일드카드 지원)
-prefab-tool query Scene.unity --find-name "Player*"
-prefab-tool query Scene.unity --find-name "*Enemy*"
+unityflow query Scene.unity --find-name "Player*"
+unityflow query Scene.unity --find-name "*Enemy*"
 
 # 컴포넌트 타입으로 GameObject 찾기
-prefab-tool query Scene.unity --find-component "SpriteRenderer"
-prefab-tool query Scene.unity --find-component "Light2D"
+unityflow query Scene.unity --find-component "SpriteRenderer"
+unityflow query Scene.unity --find-component "Light2D"
 
 # 스크립트 GUID로 MonoBehaviour 찾기
-prefab-tool query Scene.unity --find-script "abc123def456..."
+unityflow query Scene.unity --find-script "abc123def456..."
 ```
 
 ### 값 수정 (set)
@@ -81,23 +81,23 @@ prefab-tool query Scene.unity --find-script "abc123def456..."
 
 ```bash
 # 단일 값 설정
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "components/12345/localPosition" \
     --value '{"x": 0, "y": 5, "z": 0}'
 
 # 이름 변경
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "gameObjects/12345/name" \
     --value '"NewName"'
 
 # 여러 필드 한번에 수정 (batch 모드)
-prefab-tool set Scene.unity \
+unityflow set Scene.unity \
     --path "components/495733805" \
     --batch '{"portalAPrefab": {"fileID": 123, "guid": "abc", "type": 3}, "spawnRate": 2.0}' \
     --create
 
 # 새 필드 생성 (--create 플래그)
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "components/12345/newProperty" \
     --value '5.0' \
     --create
@@ -107,34 +107,34 @@ prefab-tool set Player.prefab \
 
 ```bash
 # 새 GameObject 추가
-prefab-tool add-object Scene.unity --name "Player"
-prefab-tool add-object Scene.unity --name "Child" --parent 12345
-prefab-tool add-object Scene.unity --name "Enemy" --position "10,0,5"
-prefab-tool add-object Scene.unity --name "Button" --ui --parent 67890  # UI용 RectTransform
+unityflow add-object Scene.unity --name "Player"
+unityflow add-object Scene.unity --name "Child" --parent 12345
+unityflow add-object Scene.unity --name "Enemy" --position "10,0,5"
+unityflow add-object Scene.unity --name "Button" --ui --parent 67890  # UI용 RectTransform
 
 # GameObject 복제
-prefab-tool clone-object Scene.unity --id 12345
-prefab-tool clone-object Scene.unity --id 12345 --name "Player2"
-prefab-tool clone-object Scene.unity --id 12345 --deep  # 자식 포함 복제
+unityflow clone-object Scene.unity --id 12345
+unityflow clone-object Scene.unity --id 12345 --name "Player2"
+unityflow clone-object Scene.unity --id 12345 --deep  # 자식 포함 복제
 
 # GameObject 삭제
-prefab-tool delete-object Scene.unity --id 12345
-prefab-tool delete-object Scene.unity --id 12345 --cascade  # 자식 포함 삭제
+unityflow delete-object Scene.unity --id 12345
+unityflow delete-object Scene.unity --id 12345 --cascade  # 자식 포함 삭제
 ```
 
 ### 컴포넌트 조작
 
 ```bash
 # 내장 컴포넌트 추가
-prefab-tool add-component Scene.unity --to 12345 --type SpriteRenderer
-prefab-tool add-component Scene.unity --to 12345 --type Camera
+unityflow add-component Scene.unity --to 12345 --type SpriteRenderer
+unityflow add-component Scene.unity --to 12345 --type Camera
 
 # MonoBehaviour 추가 (스크립트 GUID 필요)
-prefab-tool add-component Scene.unity --to 12345 --script "abc123..." \
+unityflow add-component Scene.unity --to 12345 --script "abc123..." \
     --props '{"speed": 5.0, "health": 100}'
 
 # 컴포넌트 삭제
-prefab-tool delete-component Scene.unity --id 67890
+unityflow delete-component Scene.unity --id 67890
 ```
 
 ### 스프라이트 연결 (set --sprite)
@@ -143,30 +143,30 @@ prefab-tool delete-component Scene.unity --id 67890
 
 ```bash
 # 기본 사용 (Single 모드 스프라이트, fileID 자동 감지)
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "components/1234567890/m_Sprite" \
     --sprite "Assets/Sprites/player.png"
 
 # Multiple 모드 스프라이트의 특정 서브 스프라이트
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "components/1234567890/m_Sprite" \
     --sprite "Assets/Sprites/atlas.png" \
     --sub-sprite "player_idle_0"
 
 # URP 기본 머티리얼 함께 설정
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "components/1234567890/m_Sprite" \
     --sprite "Assets/Sprites/player.png" \
     --use-urp-default
 
 # 커스텀 머티리얼 함께 설정
-prefab-tool set Player.prefab \
+unityflow set Player.prefab \
     --path "components/1234567890/m_Sprite" \
     --sprite "Assets/Sprites/player.png" \
     --material "Assets/Materials/Custom.mat"
 
 # 스프라이트 정보 확인
-prefab-tool sprite-info "Assets/Sprites/player.png"
+unityflow sprite-info "Assets/Sprites/player.png"
 ```
 
 **참고**: `--sprite` 옵션은 `--value`, `--batch`와 상호 배타적입니다.
@@ -177,55 +177,55 @@ prefab-tool sprite-info "Assets/Sprites/player.png"
 
 ```bash
 # JSON으로 내보내기
-prefab-tool export Player.prefab -o player.json
-prefab-tool export MainScene.unity -o scene.json
-prefab-tool export GameConfig.asset -o config.json
+unityflow export Player.prefab -o player.json
+unityflow export MainScene.unity -o scene.json
+unityflow export GameConfig.asset -o config.json
 
 # JSON 파일 편집 후 다시 Unity 파일로 변환
-prefab-tool import player.json -o Player.prefab
-prefab-tool import scene.json -o MainScene.unity
-prefab-tool import config.json -o GameConfig.asset
+unityflow import player.json -o Player.prefab
+unityflow import scene.json -o MainScene.unity
+unityflow import config.json -o GameConfig.asset
 ```
 
 ### 검증 및 정규화
 
 ```bash
 # 파일 검증
-prefab-tool validate Player.prefab
-prefab-tool validate MainScene.unity
-prefab-tool validate GameConfig.asset
+unityflow validate Player.prefab
+unityflow validate MainScene.unity
+unityflow validate GameConfig.asset
 
 # 정규화 (Git 노이즈 제거) - 필드 정렬 기본 적용
-prefab-tool normalize Player.prefab
-prefab-tool normalize MainScene.unity
+unityflow normalize Player.prefab
+unityflow normalize MainScene.unity
 ```
 
 ### GUID 조회
 
 ```bash
 # 파일에서 사용 중인 스크립트 GUID 추출
-prefab-tool scan-scripts Scene.unity --show-properties
+unityflow scan-scripts Scene.unity --show-properties
 
 # 패키지 폴더에서 GUID 추출
-prefab-tool scan-meta "Library/PackageCache/com.unity.ugui@*" -r --filter Button
+unityflow scan-meta "Library/PackageCache/com.unity.ugui@*" -r --filter Button
 
 # 프로젝트 스크립트 GUID 추출
-prefab-tool scan-meta Assets/Scripts -r --scripts-only
+unityflow scan-meta Assets/Scripts -r --scripts-only
 ```
 
 ### 기타 유용한 명령어
 
 ```bash
 # 의존성 분석
-prefab-tool deps Player.prefab
-prefab-tool deps Player.prefab --type Texture
-prefab-tool deps Player.prefab --unresolved-only
+unityflow deps Player.prefab
+unityflow deps Player.prefab --type Texture
+unityflow deps Player.prefab --unresolved-only
 
 # 역참조 검색
-prefab-tool find-refs Textures/player.png
+unityflow find-refs Textures/player.png
 
 # 두 파일 비교
-prefab-tool diff Player.prefab Player_backup.prefab
+unityflow diff Player.prefab Player_backup.prefab
 ```
 
 ---
@@ -401,17 +401,17 @@ NativeFormatImporter:
 
 대부분의 작업은 CLI로 가능하지만, 복잡한 자동화가 필요한 경우 Python API를 사용합니다.
 
-> ⚠️ **주의**: Python API는 `prefab-tool export` → JSON 수정 → `prefab-tool import` 워크플로우에서 JSON 파일을 수정할 때만 사용하세요.
+> ⚠️ **주의**: Python API는 `unityflow export` → JSON 수정 → `unityflow import` 워크플로우에서 JSON 파일을 수정할 때만 사용하세요.
 
 ```python
-from prefab_tool.parser import (
+from unityflow.parser import (
     UnityYAMLDocument,
     create_game_object,
     create_transform,
     create_rect_transform,
     create_mono_behaviour,
 )
-from prefab_tool.formats import (
+from unityflow.formats import (
     export_to_json,
     import_from_json,
     create_rect_transform_file_values,
@@ -523,10 +523,10 @@ Unity 패키지 컴포넌트들은 **MonoBehaviour(classId=114)**로 구현되�
 grep "guid:" "Library/PackageCache/com.unity.ugui@*/Runtime/UGUI/UI/Core/Button.cs.meta"
 
 # scan-meta로 패키지 스캔
-prefab-tool scan-meta "Library/PackageCache/com.unity.ugui@*" -r --scripts-only
+unityflow scan-meta "Library/PackageCache/com.unity.ugui@*" -r --scripts-only
 
 # 사용 중인 스크립트 GUID 추출
-prefab-tool scan-scripts Scene.unity --show-properties
+unityflow scan-scripts Scene.unity --show-properties
 ```
 
 ---
@@ -535,8 +535,8 @@ prefab-tool scan-scripts Scene.unity --show-properties
 
 1. **항상 백업**: 원본 파일을 수정하기 전에 백업하거나 `-o` 옵션으로 새 파일에 저장
 2. **fileID 충돌 방지**: 새 오브젝트 생성 시 `doc.generate_unique_file_id()` 사용
-3. **정규화 필수**: 편집 후 `prefab-tool normalize`로 정규화하여 Git 노이즈 방지
-4. **검증 권장**: 중요한 수정 후 `prefab-tool validate`로 무결성 확인
+3. **정규화 필수**: 편집 후 `unityflow normalize`로 정규화하여 Git 노이즈 방지
+4. **검증 권장**: 중요한 수정 후 `unityflow validate`로 무결성 확인
 5. **GUID 보존**: 외부 에셋 참조(스크립트, 텍스처 등)의 GUID는 변경하지 않음
 6. **classId 보존**: **절대로 임의의 classId를 사용하지 마세요!** 새 컴포넌트 추가 시 반드시 올바른 classId 사용
 7. **Mask + Image 알파값**: Mask 컴포넌트 사용 시 Image 알파값이 0이면 마스킹이 작동하지 않음. `m_Color.a: 1` 설정 후 `m_ShowMaskGraphic: 0`으로 숨기기
@@ -558,8 +558,8 @@ prefab-tool scan-scripts Scene.unity --show-properties
 ### 파싱 오류 발생 시
 
 ```bash
-prefab-tool stats problematic.prefab --format json
-prefab-tool validate problematic.prefab --format json
+unityflow stats problematic.prefab --format json
+unityflow validate problematic.prefab --format json
 ```
 
 ### JSON 왕복 변환 시 데이터 손실 방지
@@ -567,5 +567,5 @@ prefab-tool validate problematic.prefab --format json
 `_rawFields`를 포함하여 내보내기:
 
 ```bash
-prefab-tool export Player.prefab -o player.json  # --no-raw 없이
+unityflow export Player.prefab -o player.json  # --no-raw 없이
 ```

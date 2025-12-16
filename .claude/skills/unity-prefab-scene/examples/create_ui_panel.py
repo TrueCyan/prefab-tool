@@ -9,14 +9,14 @@
 """
 
 from pathlib import Path
-from prefab_tool.parser import (
+from unityflow.parser import (
     UnityYAMLDocument,
     UnityYAMLObject,
     create_game_object,
     create_rect_transform,
     generate_file_id,
 )
-from prefab_tool.formats import create_rect_transform_file_values
+from unityflow.formats import create_rect_transform_file_values
 
 
 def create_ui_panel(output_path: str) -> None:

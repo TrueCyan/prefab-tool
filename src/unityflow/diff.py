@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterator
 
-from prefab_tool.normalizer import UnityPrefabNormalizer
+from unityflow.normalizer import UnityPrefabNormalizer
 
 
 class DiffFormat(Enum):

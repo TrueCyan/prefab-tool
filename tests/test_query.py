@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from prefab_tool.query import query_path, set_value, get_value, merge_values
-from prefab_tool.parser import UnityYAMLDocument
+from unityflow.query import query_path, set_value, get_value, merge_values
+from unityflow.parser import UnityYAMLDocument
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

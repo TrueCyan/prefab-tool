@@ -2,7 +2,7 @@
 
 import pytest
 
-from prefab_tool.script_parser import (
+from unityflow.script_parser import (
     parse_script,
     SerializedField,
     ScriptInfo,

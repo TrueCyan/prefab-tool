@@ -1,4 +1,4 @@
-# pre-commit hooks for prefab-tool
+# pre-commit hooks for unityflow
 # See https://pre-commit.com for more information
 
 # Regex pattern for all Unity YAML file extensions
@@ -13,7 +13,7 @@
 - id: prefab-normalize
   name: Normalize Unity YAML files
   description: Normalize Unity YAML files for deterministic serialization
-  entry: prefab-tool normalize --in-place
+  entry: unityflow normalize --in-place
   language: python
   files: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams)$
   types: [file]
@@ -21,7 +21,7 @@
 - id: prefab-normalize-staged
   name: Normalize Unity YAML files (staged only)
   description: Normalize only staged Unity YAML files
-  entry: prefab-tool normalize --changed-only --staged-only
+  entry: unityflow normalize --changed-only --staged-only
   language: python
   pass_filenames: false
   always_run: true
@@ -29,7 +29,7 @@
 - id: prefab-validate
   name: Validate Unity YAML files
   description: Validate Unity YAML files for structural correctness
-  entry: prefab-tool validate
+  entry: unityflow validate
   language: python
   files: \.(prefab|unity|asset|anim|controller|overrideController|playable|mask|signal|mat|renderTexture|flare|shadervariants|spriteatlas|cubemap|physicMaterial|physicsMaterial2D|terrainlayer|brush|mixer|guiskin|fontsettings|preset|giparams)$
   types: [file]

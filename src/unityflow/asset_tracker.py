@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
-from prefab_tool.git_utils import UNITY_EXTENSIONS
+from unityflow.git_utils import UNITY_EXTENSIONS
 
 
 # Common binary asset extensions in Unity
@@ -255,7 +255,7 @@ def get_file_dependencies(
     Returns:
         List of AssetDependency objects
     """
-    from prefab_tool.parser import UnityYAMLDocument
+    from unityflow.parser import UnityYAMLDocument
 
     # Parse the file
     doc = UnityYAMLDocument.load_auto(file_path)
@@ -318,7 +318,7 @@ def find_references_to_asset(
     Returns:
         List of (file_path, references) tuples
     """
-    from prefab_tool.parser import UnityYAMLDocument
+    from unityflow.parser import UnityYAMLDocument
 
     if extensions is None:
         extensions = UNITY_EXTENSIONS

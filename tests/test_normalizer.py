@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from prefab_tool.normalizer import UnityPrefabNormalizer, normalize_prefab
-from prefab_tool.parser import UnityYAMLDocument
+from unityflow.normalizer import UnityPrefabNormalizer, normalize_prefab
+from unityflow.parser import UnityYAMLDocument
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

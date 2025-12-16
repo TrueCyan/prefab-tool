@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "prefab-tool"
-version = "0.1.9"
-description = "Unity Prefab Deterministic Serializer - canonical serialization for Unity YAML files"
+name = "unityflow"
+version = "0.2.0"
+description = "Unity workflow automation - edit, diff, and merge prefabs, scenes, and assets without the Unity Editor"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
-    {name = "prefab-tool contributors"}
+    {name = "unityflow contributors"}
 ]
-keywords = ["unity", "prefab", "yaml", "serializer", "deterministic", "vcs", "git"]
+keywords = ["unity", "prefab", "scene", "asset", "yaml", "llm", "workflow", "automation", "git"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -40,16 +40,16 @@ dev = [
     "ruff>=0.1.0",
 ]
 all = [
-    "prefab-tool[dev]",
+    "unityflow[dev]",
 ]
 
 [project.scripts]
-prefab-tool = "prefab_tool.cli:main"
+unityflow = "unityflow.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/TrueCyan/prefab-tool"
-Repository = "https://github.com/TrueCyan/prefab-tool"
-Issues = "https://github.com/TrueCyan/prefab-tool/issues"
+Homepage = "https://github.com/TrueCyan/unityflow"
+Repository = "https://github.com/TrueCyan/unityflow"
+Issues = "https://github.com/TrueCyan/unityflow/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

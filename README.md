@@ -1,6 +1,6 @@
-# prefab-tool
+# unityflow
 
-Unity YAML 파일(프리팹, 씬, 에셋)의 결정적 직렬화 도구입니다. Unity의 비결정적 직렬화로 인한 VCS 노이즈를 제거하여 Git diff/merge를 개선합니다.
+Unity 워크플로우 자동화 도구입니다. Unity 에디터 없이 프리팹, 씬, 에셋을 편집하고, diff/merge하고, LLM과 통합할 수 있습니다.
 
 ## 주요 기능
 
@@ -16,22 +16,22 @@ Unity YAML 파일(프리팹, 씬, 에셋)의 결정적 직렬화 도구입니다
 ### GitHub에서 설치
 
 ```bash
-pip install git+https://github.com/TrueCyan/prefab-tool.git
+pip install git+https://github.com/TrueCyan/unityflow.git
 ```
 
 ### 소스에서 설치
 
 ```bash
-git clone https://github.com/TrueCyan/prefab-tool
-cd prefab-tool
+git clone https://github.com/TrueCyan/unityflow
+cd unityflow
 pip install .
 ```
 
 ### 개발 환경 설치
 
 ```bash
-git clone https://github.com/TrueCyan/prefab-tool
-cd prefab-tool
+git clone https://github.com/TrueCyan/unityflow
+cd unityflow
 pip install -e ".[dev]"
 ```
 
@@ -49,68 +49,68 @@ pip install -e ".[dev]"
 
 ```bash
 # 단일 파일 정규화
-prefab-tool normalize Player.prefab
-prefab-tool normalize MainScene.unity
-prefab-tool normalize GameConfig.asset
+unityflow normalize Player.prefab
+unityflow normalize MainScene.unity
+unityflow normalize GameConfig.asset
 
 # 여러 파일 정규화
-prefab-tool normalize *.prefab *.unity *.asset
+unityflow normalize *.prefab *.unity *.asset
 
 # 병렬 처리 (4 워커)
-prefab-tool normalize Assets/**/*.prefab --parallel 4 --progress
+unityflow normalize Assets/**/*.prefab --parallel 4 --progress
 
 # Git에서 변경된 파일만 정규화
-prefab-tool normalize --changed-only
+unityflow normalize --changed-only
 
 # 스테이징된 파일만 정규화
-prefab-tool normalize --changed-only --staged-only
+unityflow normalize --changed-only --staged-only
 ```
 
 ### 파일 검증
 
 ```bash
 # 단일 파일 검증
-prefab-tool validate Player.prefab
-prefab-tool validate MainScene.unity
+unityflow validate Player.prefab
+unityflow validate MainScene.unity
 
 # 엄격 모드 (경고도 오류로 처리)
-prefab-tool validate Player.prefab --strict
+unityflow validate Player.prefab --strict
 ```
 
 ### 파일 비교
 
 ```bash
 # 두 파일 비교
-prefab-tool diff old.prefab new.prefab
-prefab-tool diff Scene_v1.unity Scene_v2.unity
+unityflow diff old.prefab new.prefab
+unityflow diff Scene_v1.unity Scene_v2.unity
 
 # 정규화 없이 비교
-prefab-tool diff old.prefab new.prefab --no-normalize
+unityflow diff old.prefab new.prefab --no-normalize
 ```
 
 ### JSON 변환 (LLM 통합)
 
 ```bash
 # JSON으로 내보내기
-prefab-tool export Player.prefab -o player.json
-prefab-tool export MainScene.unity -o scene.json
-prefab-tool export GameConfig.asset -o config.json
+unityflow export Player.prefab -o player.json
+unityflow export MainScene.unity -o scene.json
+unityflow export GameConfig.asset -o config.json
 
 # JSON에서 가져오기
-prefab-tool import player.json -o Player.prefab
+unityflow import player.json -o Player.prefab
 ```
 
 ### 에셋 의존성 분석
 
 ```bash
 # 모든 의존성 표시
-prefab-tool deps Player.prefab
+unityflow deps Player.prefab
 
 # 바이너리 에셋만 (텍스처, 메시 등)
-prefab-tool deps Player.prefab --binary-only
+unityflow deps Player.prefab --binary-only
 
 # 특정 에셋을 참조하는 파일 찾기
-prefab-tool find-refs Textures/player.png
+unityflow find-refs Textures/player.png
 ```
 
 ## Git 통합 설정
@@ -119,13 +119,13 @@ Unity 프로젝트 루트에서 단일 명령어로 Git 통합을 설정할 수 
 
 ```bash
 # 기본 설정 (diff/merge 드라이버 + .gitattributes)
-prefab-tool setup
+unityflow setup
 
 # pre-commit 훅도 함께 설치
-prefab-tool setup --with-hooks
+unityflow setup --with-hooks
 
 # 글로벌 설정 (모든 저장소에 적용)
-prefab-tool setup --global
+unityflow setup --global
 ```
 
 이 명령어는 다음을 자동으로 수행합니다:
@@ -138,11 +138,11 @@ prefab-tool setup --global
 수동으로 설정하려면 `.gitconfig`에 추가:
 ```ini
 [diff "unity"]
-    textconv = prefab-tool git-textconv
+    textconv = unityflow git-textconv
 
 [merge "unity"]
     name = Unity YAML Merge
-    driver = prefab-tool merge %O %A %B -o %A --path %P
+    driver = unityflow merge %O %A %B -o %A --path %P
 ```
 
 `.gitattributes`에 추가:
@@ -155,7 +155,7 @@ prefab-tool setup --global
 ## Python API 사용법
 
 ```python
-from prefab_tool import (
+from unityflow import (
     UnityYAMLDocument,
     UnityPrefabNormalizer,
     analyze_dependencies,
@@ -184,7 +184,7 @@ changed = get_changed_files(staged_only=True)
 ### Unity 파일 프로그래매틱 생성
 
 ```python
-from prefab_tool.parser import (
+from unityflow.parser import (
     UnityYAMLDocument,
     create_game_object,
     create_transform,
@@ -229,25 +229,25 @@ doc.save("MyObject.prefab")  # 또는 .unity, .asset
 ## CLI 명령어 요약
 
 ```bash
-prefab-tool setup       # Git 통합 설정
-prefab-tool normalize   # Unity YAML 파일 정규화
-prefab-tool validate    # 구조적 무결성 검증
-prefab-tool diff        # 두 파일 비교
-prefab-tool merge       # 3-way 병합
-prefab-tool query       # 경로 기반 데이터 조회
-prefab-tool set         # 경로 기반 값 설정
-prefab-tool export      # JSON으로 내보내기
-prefab-tool import      # JSON에서 가져오기
-prefab-tool deps        # 에셋 의존성 분석
-prefab-tool find-refs   # 역참조 검색
-prefab-tool stats       # 파일 통계 조회
+unityflow setup       # Git 통합 설정
+unityflow normalize   # Unity YAML 파일 정규화
+unityflow validate    # 구조적 무결성 검증
+unityflow diff        # 두 파일 비교
+unityflow merge       # 3-way 병합
+unityflow query       # 경로 기반 데이터 조회
+unityflow set         # 경로 기반 값 설정
+unityflow export      # JSON으로 내보내기
+unityflow import      # JSON에서 가져오기
+unityflow deps        # 에셋 의존성 분석
+unityflow find-refs   # 역참조 검색
+unityflow stats       # 파일 통계 조회
 ```
 
-전체 옵션은 `prefab-tool <command> --help`로 확인하세요.
+전체 옵션은 `unityflow <command> --help`로 확인하세요.
 
 ## 향후 계획
 
-- **프로젝트 전체 통계**: `prefab-tool stats --recursive Assets/`
+- **프로젝트 전체 통계**: `unityflow stats --recursive Assets/`
 
 ## 개발
 
