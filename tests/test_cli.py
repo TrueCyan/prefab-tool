@@ -582,26 +582,45 @@ class TestDeleteComponentCommand:
         test_file = tmp_path / "test.prefab"
         test_file.write_text(source.read_text())
 
+        # First add a component
+        add_result = runner.invoke(
+            main,
+            [
+                "add-component",
+                str(test_file),
+                "--to",
+                "BasicPrefab",
+                "--type",
+                "SpriteRenderer",
+            ],
+        )
+        assert add_result.exit_code == 0
+
+        # Then delete it
         result = runner.invoke(
             main,
             [
                 "delete-component",
                 str(test_file),
-                "--id",
-                "400000",  # Transform fileID
+                "--from",
+                "BasicPrefab",
+                "--type",
+                "SpriteRenderer",
                 "--force",
             ],
         )
 
         assert result.exit_code == 0
-        assert "Deleted component" in result.output
+        assert "Deleted SpriteRenderer" in result.output
 
     def test_delete_component_help(self, runner):
         """Test delete-component command help."""
         result = runner.invoke(main, ["delete-component", "--help"])
 
         assert result.exit_code == 0
-        assert "--id" in result.output
+        assert "--from" in result.output
+        assert "--type" in result.output
+        assert "--script" in result.output
         assert "--force" in result.output
 
 
