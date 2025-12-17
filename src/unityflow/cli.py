@@ -847,6 +847,7 @@ def _resolve_component_path(
         "Canvas/Panel/Button/Image/m_Sprite" -> "components/67890/m_Sprite"
         "Canvas/Button/Image[1]/m_Color" -> "components/11111/m_Color"
         "Player/name" -> "gameObjects/12345/name"
+        "Canvas/Panel/RectTransform" -> "components/12345" (for batch mode)
 
     Args:
         doc: The Unity YAML document
@@ -866,12 +867,6 @@ def _resolve_component_path(
     if len(parts) < 2:
         return None, f"Invalid path format: {path_spec}"
 
-    # Last part is the property name
-    property_name = parts[-1]
-
-    # Check if second-to-last part is a component type (with optional index)
-    component_match = re.match(r"^([A-Za-z][A-Za-z0-9]*)(?:\[(\d+)\])?$", parts[-2])
-
     # Build reverse mapping: class name -> class IDs
     name_to_ids: dict[str, list[int]] = {}
     for class_id, class_name in CLASS_IDS.items():
@@ -887,6 +882,96 @@ def _resolve_component_path(
         "horizontallayoutgroup", "contentsizefitter", "textmeshprougui",
         "tmp_inputfield", "eventsystem", "inputsystemuiinputmodule", "light2d"
     }
+
+    # Check if the LAST part is a component type (for batch mode - path ends with component)
+    # e.g., "Canvas/Panel/RectTransform" -> path to the component itself, no property
+    last_part_match = re.match(r"^([A-Za-z][A-Za-z0-9]*)(?:\[(\d+)\])?$", parts[-1])
+    if last_part_match:
+        last_component_type = last_part_match.group(1)
+        last_component_index = int(last_part_match.group(2)) if last_part_match.group(2) else None
+        last_component_type_lower = last_component_type.lower()
+
+        # Check if last part is a known component type
+        last_is_component = (
+            last_component_type_lower in name_to_ids or
+            last_component_type_lower in package_components or
+            last_component_type == "MonoBehaviour"
+        )
+
+        if last_is_component:
+            # Path format: GameObject.../ComponentType (no property - for batch mode)
+            go_path = "/".join(parts[:-1])
+            if not go_path:
+                return None, f"Invalid path: missing GameObject path before {last_component_type}"
+
+            # Resolve GameObject
+            go_id, error = _resolve_gameobject_by_path(doc, go_path)
+            if error:
+                return None, error
+
+            # Find the component
+            go = doc.get_by_file_id(go_id)
+            if not go:
+                return None, f"GameObject not found"
+
+            go_content = go.get_content()
+            if not go_content or "m_Component" not in go_content:
+                return None, f"GameObject has no components"
+
+            # Find matching components
+            matching_components: list[int] = []
+            for comp_ref in go_content["m_Component"]:
+                comp_id = comp_ref.get("component", {}).get("fileID", 0)
+                comp = doc.get_by_file_id(comp_id)
+                if not comp:
+                    continue
+
+                # Check if component matches the type
+                comp_class_name = comp.class_name.lower()
+
+                # For package components (MonoBehaviour), check script GUID
+                if last_component_type_lower in package_components:
+                    if comp.class_id == 114:  # MonoBehaviour
+                        comp_content = comp.get_content()
+                        if comp_content:
+                            script_ref = comp_content.get("m_Script", {})
+                            script_guid = script_ref.get("guid", "") if isinstance(script_ref, dict) else ""
+                            # Check if GUID matches the package component
+                            # Use case-insensitive key lookup
+                            expected_guid = ""
+                            for key, guid in PACKAGE_COMPONENT_GUIDS.items():
+                                if key.lower() == last_component_type_lower:
+                                    expected_guid = guid.lower()
+                                    break
+                            if script_guid.lower() == expected_guid:
+                                matching_components.append(comp_id)
+                elif comp_class_name == last_component_type_lower:
+                    matching_components.append(comp_id)
+
+            if not matching_components:
+                return None, f"Component '{last_component_type}' not found on '{go_path}'"
+
+            if len(matching_components) == 1:
+                # Return component path without property (for batch mode)
+                return f"components/{matching_components[0]}", None
+
+            # Multiple matches
+            if last_component_index is not None:
+                if last_component_index < len(matching_components):
+                    return f"components/{matching_components[last_component_index]}", None
+                else:
+                    return None, f"Index [{last_component_index}] out of range. Found {len(matching_components)} {last_component_type} components"
+
+            # No index specified
+            error_lines = [f"Multiple '{last_component_type}' components on '{go_path}'."]
+            error_lines.append(f"Use index to select: \"{go_path}/{last_component_type}[0]\" (0 to {len(matching_components) - 1})")
+            return None, "\n".join(error_lines)
+
+    # Last part is the property name
+    property_name = parts[-1]
+
+    # Check if second-to-last part is a component type (with optional index)
+    component_match = re.match(r"^([A-Za-z][A-Za-z0-9]*)(?:\[(\d+)\])?$", parts[-2])
 
     if component_match:
         component_type = component_match.group(1)
@@ -939,7 +1024,12 @@ def _resolve_component_path(
                             script_ref = comp_content.get("m_Script", {})
                             script_guid = script_ref.get("guid", "") if isinstance(script_ref, dict) else ""
                             # Check if GUID matches the package component
-                            expected_guid = PACKAGE_COMPONENT_GUIDS.get(component_type, "").lower()
+                            # Use case-insensitive key lookup
+                            expected_guid = ""
+                            for key, guid in PACKAGE_COMPONENT_GUIDS.items():
+                                if key.lower() == component_type_lower:
+                                    expected_guid = guid.lower()
+                                    break
                             if script_guid.lower() == expected_guid:
                                 matching_components.append(comp_id)
                 elif comp_class_name == component_type_lower:
