@@ -3085,6 +3085,22 @@ def setup(
             click.echo("  Creating .gitattributes...")
             gitattributes_path.write_text(gitattributes_content)
 
+        # Setup .gitignore for .unityflow cache directory
+        gitignore_path = repo_root / ".gitignore"
+        unityflow_ignore_entry = ".unityflow/"
+
+        if gitignore_path.exists():
+            existing_gitignore = gitignore_path.read_text()
+            if unityflow_ignore_entry in existing_gitignore or ".unityflow" in existing_gitignore:
+                click.echo("  .gitignore already includes .unityflow/")
+            else:
+                click.echo("  Adding .unityflow/ to .gitignore...")
+                with open(gitignore_path, "a") as f:
+                    f.write(f"\n# unityflow cache\n{unityflow_ignore_entry}\n")
+        else:
+            click.echo("  Creating .gitignore with .unityflow/...")
+            gitignore_path.write_text(f"# unityflow cache\n{unityflow_ignore_entry}\n")
+
     # Install hooks if requested
     if with_hooks and repo_root:
         click.echo()
@@ -3691,12 +3707,22 @@ def _validate_field_value(field_name: str, value: any) -> tuple[bool, str | None
     return True, None
 
 
-def _resolve_script_to_guid(script_ref: str, file_path: Path) -> tuple[str | None, str | None]:
+def _resolve_script_to_guid(
+    script_ref: str,
+    file_path: Path,
+    include_packages: bool = True,
+) -> tuple[str | None, str | None]:
     """Resolve a script reference (GUID or name) to a GUID.
+
+    Searches in order:
+    1. Assets/ folder (user scripts)
+    2. Packages/ folder (local packages)
+    3. Library/PackageCache/ (downloaded packages) - if include_packages=True
 
     Args:
         script_ref: Either a 32-char hex GUID or a script class name
         file_path: Path to the Unity file being edited (for project root detection)
+        include_packages: Whether to search in Library/PackageCache/
 
     Returns:
         Tuple of (guid, error_message). If successful, error_message is None.
@@ -3708,7 +3734,7 @@ def _resolve_script_to_guid(script_ref: str, file_path: Path) -> tuple[str | Non
         return script_ref, None
 
     # It's a script name - search for matching .cs file
-    from unityflow.asset_tracker import find_unity_project_root
+    from unityflow.asset_tracker import find_unity_project_root, get_cached_guid_index
 
     project_root = find_unity_project_root(file_path)
     if not project_root:
@@ -3719,34 +3745,96 @@ def _resolve_script_to_guid(script_ref: str, file_path: Path) -> tuple[str | Non
     if script_name.endswith(".cs"):
         script_name = script_name[:-3]
 
-    # Search in Assets folder
-    assets_dir = project_root / "Assets"
-    if not assets_dir.exists():
-        return None, f"Assets 폴더를 찾을 수 없습니다: {assets_dir}"
+    # Use cached GUID index for faster lookup
+    guid_index = get_cached_guid_index(project_root, include_packages=include_packages)
 
-    # Find all matching .cs files
+    # Search by script name in the index
     matches: list[tuple[Path, str]] = []
     guid_pattern = re.compile(r"^guid:\s*([a-f0-9]{32})\s*$", re.MULTILINE)
 
-    for cs_file in assets_dir.rglob(f"{script_name}.cs"):
-        meta_file = cs_file.with_suffix(".cs.meta")
-        if meta_file.exists():
-            try:
-                meta_content = meta_file.read_text(encoding="utf-8")
-                guid_match = guid_pattern.search(meta_content)
-                if guid_match:
-                    matches.append((cs_file, guid_match.group(1)))
-            except Exception:
-                pass
+    # Define search directories in priority order
+    search_dirs = [project_root / "Assets"]
+    if (project_root / "Packages").is_dir():
+        search_dirs.append(project_root / "Packages")
+    if include_packages and (project_root / "Library" / "PackageCache").is_dir():
+        search_dirs.append(project_root / "Library" / "PackageCache")
+
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+
+        for cs_file in search_dir.rglob(f"{script_name}.cs"):
+            meta_file = cs_file.with_suffix(".cs.meta")
+            if meta_file.exists():
+                try:
+                    meta_content = meta_file.read_text(encoding="utf-8")
+                    guid_match = guid_pattern.search(meta_content)
+                    if guid_match:
+                        matches.append((cs_file, guid_match.group(1)))
+                except Exception:
+                    pass
 
     if not matches:
-        return None, f"스크립트를 찾을 수 없습니다: '{script_name}'. Assets 폴더에 {script_name}.cs 파일이 있는지 확인하세요."
+        search_locations = "Assets/"
+        if include_packages:
+            search_locations += ", Packages/, Library/PackageCache/"
+        return None, f"스크립트를 찾을 수 없습니다: '{script_name}'. 검색 위치: {search_locations}"
 
     if len(matches) > 1:
+        # Prefer Assets/ over packages
+        assets_matches = [m for m in matches if "Assets" in str(m[0])]
+        if len(assets_matches) == 1:
+            return assets_matches[0][1], None
+
         paths = "\n  ".join(str(m[0].relative_to(project_root)) for m in matches)
-        return None, f"'{script_name}' 이름의 스크립트가 여러 개 있습니다:\n  {paths}\n정확한 경로를 지정하세요."
+        return None, f"'{script_name}' 이름의 스크립트가 여러 개 있습니다:\n  {paths}\nGUID를 직접 지정하세요."
 
     return matches[0][1], None
+
+
+def _get_script_default_properties(
+    script_guid: str,
+    project_root: Path,
+) -> dict | None:
+    """Get default property values from a script by parsing the C# source.
+
+    Args:
+        script_guid: GUID of the script
+        project_root: Unity project root path
+
+    Returns:
+        Dict of property name -> default value, or None if not found
+    """
+    from unityflow.asset_tracker import get_cached_guid_index
+    from unityflow.script_parser import parse_script_file
+
+    # Get script path from GUID
+    guid_index = get_cached_guid_index(project_root, include_packages=True)
+    script_path = guid_index.get_path(script_guid)
+
+    if script_path is None:
+        return None
+
+    # Resolve to absolute path
+    if not script_path.is_absolute():
+        script_path = project_root / script_path
+
+    # Only parse C# scripts
+    if script_path.suffix.lower() != ".cs":
+        return None
+
+    # Parse script
+    script_info = parse_script_file(script_path)
+    if script_info is None:
+        return None
+
+    # Extract default values from fields
+    defaults = {}
+    for field in script_info.fields:
+        if field.default_value is not None:
+            defaults[field.unity_name] = field.default_value
+
+    return defaults if defaults else None
 
 
 @main.command(name="add-component")
@@ -3849,11 +3937,11 @@ def add_component(
 
     output_path = output or file
 
-    # Parse properties
-    properties = None
+    # Parse user-provided properties
+    user_properties = None
     if props:
         try:
-            properties = json.loads(props)
+            user_properties = json.loads(props)
         except json.JSONDecodeError as e:
             click.echo(f"Error: Invalid JSON for --props: {e}", err=True)
             sys.exit(1)
@@ -3871,23 +3959,49 @@ def add_component(
 
     component_id = doc.generate_unique_file_id()
 
+    # Get project root for script parsing
+    from unityflow.asset_tracker import find_unity_project_root
+    project_root = find_unity_project_root(file)
+
     if script_guid:
+        # Get default values from script
+        properties = {}
+        if project_root:
+            script_defaults = _get_script_default_properties(script_guid, project_root)
+            if script_defaults:
+                properties.update(script_defaults)
+
+        # User properties override script defaults
+        if user_properties:
+            properties.update(user_properties)
+
         # Create MonoBehaviour with explicit script GUID
         component = create_mono_behaviour(
             game_object_id=target_id,
             script_guid=script_guid,
             file_id=component_id,
-            properties=properties,
+            properties=properties if properties else None,
         )
         click.echo(f"Added MonoBehaviour component")
     elif component_type in PACKAGE_COMPONENT_GUIDS:
-        # Create package component (MonoBehaviour with known GUID)
+        # Get default values from package script
         package_guid = PACKAGE_COMPONENT_GUIDS[component_type]
+        properties = {}
+        if project_root:
+            script_defaults = _get_script_default_properties(package_guid, project_root)
+            if script_defaults:
+                properties.update(script_defaults)
+
+        # User properties override script defaults
+        if user_properties:
+            properties.update(user_properties)
+
+        # Create package component (MonoBehaviour with known GUID)
         component = create_mono_behaviour(
             game_object_id=target_id,
             script_guid=package_guid,
             file_id=component_id,
-            properties=properties,
+            properties=properties if properties else None,
         )
         click.echo(f"Added {component_type} component (package)")
     else:
@@ -3896,7 +4010,7 @@ def add_component(
             component_type=component_type,
             game_object_id=target_id,
             file_id=component_id,
-            properties=properties,
+            properties=user_properties,
         )
         click.echo(f"Added {component_type} component")
 
