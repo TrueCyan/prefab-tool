@@ -3443,8 +3443,25 @@ PACKAGE_COMPONENT_GUIDS: dict[str, str] = {
 
 # Built-in component types (native Unity components)
 BUILTIN_COMPONENT_TYPES = [
-    "SpriteRenderer", "Camera", "Light", "AudioSource",
-    "BoxCollider2D", "CircleCollider2D", "Rigidbody2D",
+    # Renderer
+    "SpriteRenderer", "MeshRenderer", "TrailRenderer", "LineRenderer", "SkinnedMeshRenderer",
+    # Camera & Light
+    "Camera", "Light",
+    # Audio
+    "AudioSource", "AudioListener",
+    # 3D Colliders
+    "BoxCollider", "SphereCollider", "CapsuleCollider", "MeshCollider",
+    # 2D Colliders
+    "BoxCollider2D", "CircleCollider2D", "PolygonCollider2D", "EdgeCollider2D",
+    "CapsuleCollider2D", "CompositeCollider2D",
+    # Physics
+    "Rigidbody", "Rigidbody2D", "CharacterController",
+    # Animation
+    "Animator", "Animation",
+    # UI
+    "Canvas", "CanvasGroup", "CanvasRenderer",
+    # Misc
+    "MeshFilter", "TextMesh", "ParticleSystem", "SpriteMask",
 ]
 
 # All supported component types for --type option
@@ -3912,13 +3929,46 @@ def _create_builtin_component(
         "Transform": 4,
         "RectTransform": 224,
         "MonoBehaviour": 114,
+        # Renderer
         "SpriteRenderer": 212,
+        "MeshRenderer": 23,
+        "TrailRenderer": 96,
+        "LineRenderer": 120,
+        "SkinnedMeshRenderer": 137,
+        # Camera & Light
         "Camera": 20,
         "Light": 108,
+        # Audio
         "AudioSource": 82,
+        "AudioListener": 81,
+        # 3D Colliders
+        "BoxCollider": 65,
+        "SphereCollider": 135,
+        "CapsuleCollider": 136,
+        "MeshCollider": 64,
+        # 2D Colliders
         "BoxCollider2D": 61,
         "CircleCollider2D": 58,
+        "PolygonCollider2D": 60,
+        "EdgeCollider2D": 68,
+        "CapsuleCollider2D": 70,
+        "CompositeCollider2D": 66,
+        # Physics
+        "Rigidbody": 54,
         "Rigidbody2D": 50,
+        "CharacterController": 144,
+        # Animation
+        "Animator": 95,
+        "Animation": 111,
+        # UI
+        "Canvas": 223,
+        "CanvasGroup": 225,
+        "CanvasRenderer": 222,
+        # Misc
+        "MeshFilter": 33,
+        "TextMesh": 102,
+        "ParticleSystem": 180,
+        "SpriteMask": 199,
     }
 
     class_id = class_ids.get(component_type, 114)
@@ -4024,6 +4074,276 @@ def _create_builtin_component(
             "m_SleepingMode": 1,
             "m_CollisionDetection": 0,
             "m_Constraints": 0,
+        })
+    elif component_type == "Canvas":
+        content.update({
+            "m_RenderMode": 0,
+            "m_Camera": {"fileID": 0},
+            "m_PlaneDistance": 100,
+            "m_PixelPerfect": 0,
+            "m_ReceivesEvents": 1,
+            "m_OverrideSorting": 0,
+            "m_OverridePixelPerfect": 0,
+            "m_SortingBucketNormalizedSize": 0,
+            "m_VertexColorAlwaysGammaSpace": 0,
+            "m_AdditionalShaderChannelsFlag": 25,
+            "m_UpdateRectTransformForStandalone": 0,
+            "m_SortingLayerID": 0,
+            "m_SortingOrder": 0,
+            "m_TargetDisplay": 0,
+        })
+    elif component_type == "CanvasGroup":
+        content.update({
+            "m_Alpha": 1,
+            "m_Interactable": 1,
+            "m_BlocksRaycasts": 1,
+            "m_IgnoreParentGroups": 0,
+        })
+    elif component_type == "CanvasRenderer":
+        content.update({
+            "m_CullTransparentMesh": 1,
+        })
+    # Renderer components
+    elif component_type == "MeshRenderer":
+        content.update({
+            "m_CastShadows": 1,
+            "m_ReceiveShadows": 1,
+            "m_DynamicOccludee": 1,
+            "m_StaticShadowCaster": 0,
+            "m_MotionVectors": 1,
+            "m_LightProbeUsage": 1,
+            "m_ReflectionProbeUsage": 1,
+            "m_RenderingLayerMask": 1,
+            "m_RendererPriority": 0,
+            "m_Materials": [],
+        })
+    elif component_type == "TrailRenderer":
+        content.update({
+            "m_CastShadows": 0,
+            "m_ReceiveShadows": 0,
+            "m_DynamicOccludee": 1,
+            "m_MotionVectors": 0,
+            "m_Time": 5,
+            "m_MinVertexDistance": 0.1,
+            "m_Autodestruct": 0,
+            "m_Emitting": 1,
+            "m_Parameters": {
+                "widthMultiplier": 1,
+                "widthCurve": {"serializedVersion": 2, "m_Curve": [], "m_PreInfinity": 2, "m_PostInfinity": 2},
+                "colorGradient": {"serializedVersion": 2, "key0": {"r": 1, "g": 1, "b": 1, "a": 1}, "key1": {"r": 1, "g": 1, "b": 1, "a": 1}},
+            },
+        })
+    elif component_type == "LineRenderer":
+        content.update({
+            "m_CastShadows": 0,
+            "m_ReceiveShadows": 0,
+            "m_DynamicOccludee": 1,
+            "m_MotionVectors": 0,
+            "m_Positions": [],
+            "m_Parameters": {
+                "widthMultiplier": 1,
+                "widthCurve": {"serializedVersion": 2, "m_Curve": [], "m_PreInfinity": 2, "m_PostInfinity": 2},
+                "colorGradient": {"serializedVersion": 2, "key0": {"r": 1, "g": 1, "b": 1, "a": 1}, "key1": {"r": 1, "g": 1, "b": 1, "a": 1}},
+            },
+            "m_UseWorldSpace": 1,
+            "m_Loop": 0,
+        })
+    elif component_type == "SkinnedMeshRenderer":
+        content.update({
+            "m_CastShadows": 1,
+            "m_ReceiveShadows": 1,
+            "m_DynamicOccludee": 1,
+            "m_MotionVectors": 1,
+            "m_LightProbeUsage": 1,
+            "m_ReflectionProbeUsage": 1,
+            "m_RenderingLayerMask": 1,
+            "m_RendererPriority": 0,
+            "m_Materials": [],
+            "m_Mesh": {"fileID": 0},
+            "m_Bones": [],
+            "m_BlendShapeWeights": [],
+            "m_RootBone": {"fileID": 0},
+            "m_AABB": {"m_Center": {"x": 0, "y": 0, "z": 0}, "m_Extent": {"x": 0, "y": 0, "z": 0}},
+            "m_UpdateWhenOffscreen": 0,
+            "m_SkinnedMotionVectors": 1,
+        })
+    # Audio
+    elif component_type == "AudioListener":
+        # AudioListener has minimal properties
+        pass  # Uses base content only
+    # 3D Colliders
+    elif component_type == "BoxCollider":
+        content.update({
+            "m_IsTrigger": 0,
+            "m_Material": {"fileID": 0},
+            "m_Center": {"x": 0, "y": 0, "z": 0},
+            "m_Size": {"x": 1, "y": 1, "z": 1},
+        })
+    elif component_type == "SphereCollider":
+        content.update({
+            "m_IsTrigger": 0,
+            "m_Material": {"fileID": 0},
+            "m_Center": {"x": 0, "y": 0, "z": 0},
+            "m_Radius": 0.5,
+        })
+    elif component_type == "CapsuleCollider":
+        content.update({
+            "m_IsTrigger": 0,
+            "m_Material": {"fileID": 0},
+            "m_Center": {"x": 0, "y": 0, "z": 0},
+            "m_Radius": 0.5,
+            "m_Height": 2,
+            "m_Direction": 1,  # Y-axis
+        })
+    elif component_type == "MeshCollider":
+        content.update({
+            "m_IsTrigger": 0,
+            "m_Material": {"fileID": 0},
+            "m_Convex": 0,
+            "m_CookingOptions": 30,
+            "m_Mesh": {"fileID": 0},
+        })
+    # 2D Colliders (additional)
+    elif component_type == "PolygonCollider2D":
+        content.update({
+            "m_Density": 1,
+            "m_Material": {"fileID": 0},
+            "m_IsTrigger": 0,
+            "m_UsedByEffector": 0,
+            "m_UsedByComposite": 0,
+            "m_Offset": {"x": 0, "y": 0},
+            "m_UseDelaunayMesh": 0,
+            "m_Points": {"m_Paths": []},
+        })
+    elif component_type == "EdgeCollider2D":
+        content.update({
+            "m_Density": 1,
+            "m_Material": {"fileID": 0},
+            "m_IsTrigger": 0,
+            "m_UsedByEffector": 0,
+            "m_UsedByComposite": 0,
+            "m_Offset": {"x": 0, "y": 0},
+            "m_EdgeRadius": 0,
+            "m_Points": [],
+        })
+    elif component_type == "CapsuleCollider2D":
+        content.update({
+            "m_Density": 1,
+            "m_Material": {"fileID": 0},
+            "m_IsTrigger": 0,
+            "m_UsedByEffector": 0,
+            "m_UsedByComposite": 0,
+            "m_Offset": {"x": 0, "y": 0},
+            "m_Size": {"x": 1, "y": 2},
+            "m_Direction": 1,  # Vertical
+        })
+    elif component_type == "CompositeCollider2D":
+        content.update({
+            "m_Density": 1,
+            "m_Material": {"fileID": 0},
+            "m_IsTrigger": 0,
+            "m_UsedByEffector": 0,
+            "m_Offset": {"x": 0, "y": 0},
+            "m_GeometryType": 0,  # Polygons
+            "m_GenerationType": 0,  # Synchronous
+            "m_VertexDistance": 0.0005,
+            "m_OffsetDistance": 0.000025,
+        })
+    # Physics (3D)
+    elif component_type == "Rigidbody":
+        content.update({
+            "m_Mass": 1,
+            "m_Drag": 0,
+            "m_AngularDrag": 0.05,
+            "m_CenterOfMass": {"x": 0, "y": 0, "z": 0},
+            "m_InertiaTensor": {"x": 1, "y": 1, "z": 1},
+            "m_InertiaRotation": {"x": 0, "y": 0, "z": 0, "w": 1},
+            "m_UseGravity": 1,
+            "m_IsKinematic": 0,
+            "m_Interpolate": 0,
+            "m_Constraints": 0,
+            "m_CollisionDetection": 0,
+        })
+    elif component_type == "CharacterController":
+        content.update({
+            "m_Height": 2,
+            "m_Radius": 0.5,
+            "m_SlopeLimit": 45,
+            "m_StepOffset": 0.3,
+            "m_SkinWidth": 0.08,
+            "m_MinMoveDistance": 0.001,
+            "m_Center": {"x": 0, "y": 0, "z": 0},
+        })
+    # Animation
+    elif component_type == "Animator":
+        content.update({
+            "m_Controller": {"fileID": 0},
+            "m_Avatar": {"fileID": 0},
+            "m_ApplyRootMotion": 0,
+            "m_LinearVelocityBlending": 0,
+            "m_WarningMessage": "",
+            "m_HasTransformHierarchy": 1,
+            "m_AllowConstantClipSamplingOptimization": 1,
+            "m_KeepAnimatorStateOnDisable": 0,
+            "m_UpdateMode": 0,  # Normal
+            "m_CullingMode": 0,  # AlwaysAnimate
+        })
+    elif component_type == "Animation":
+        content.update({
+            "m_Animation": {"fileID": 0},
+            "m_Animations": [],
+            "m_WrapMode": 0,  # Default
+            "m_PlayAutomatically": 1,
+            "m_AnimatePhysics": 0,
+            "m_CullingType": 0,
+        })
+    # Misc
+    elif component_type == "MeshFilter":
+        content.update({
+            "m_Mesh": {"fileID": 0},
+        })
+    elif component_type == "TextMesh":
+        content.update({
+            "m_Text": "",
+            "m_OffsetZ": 0,
+            "m_CharacterSize": 1,
+            "m_LineSpacing": 1,
+            "m_Anchor": 4,  # MiddleCenter
+            "m_Alignment": 0,  # Left
+            "m_TabSize": 4,
+            "m_FontSize": 0,
+            "m_FontStyle": 0,  # Normal
+            "m_RichText": 1,
+            "m_Font": {"fileID": 0},
+            "m_Color": {"r": 1, "g": 1, "b": 1, "a": 1},
+        })
+    elif component_type == "ParticleSystem":
+        # ParticleSystem has very complex default structure, using minimal
+        content.update({
+            "lengthInSec": 5,
+            "simulationSpeed": 1,
+            "looping": 1,
+            "prewarm": 0,
+            "playOnAwake": 1,
+            "useUnscaledTime": 0,
+            "autoRandomSeed": 1,
+            "useRigidbodyForVelocity": 1,
+            "startDelay": {"serializedVersion": 2, "minMaxState": 0, "scalar": 0},
+            "moveWithTransform": 0,
+            "moveWithCustomTransform": {"fileID": 0},
+            "scalingMode": 1,
+            "randomSeed": 0,
+        })
+    elif component_type == "SpriteMask":
+        content.update({
+            "m_Sprite": {"fileID": 0},
+            "m_AlphaCutoff": 0.5,
+            "m_IsCustomRangeActive": 0,
+            "m_FrontSortingLayerID": 0,
+            "m_FrontSortingOrder": 0,
+            "m_BackSortingLayerID": 0,
+            "m_BackSortingOrder": 0,
+            "m_SpriteSortPoint": 0,
         })
 
     # Override with custom properties
