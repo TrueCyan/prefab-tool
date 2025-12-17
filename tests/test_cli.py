@@ -799,3 +799,141 @@ class TestQueryEnhancements:
         assert "--find-name" in result.output
         assert "--find-component" in result.output
         assert "--find-script" in result.output
+
+
+class TestSetCommand:
+    """Tests for the set command."""
+
+    def test_set_recttransform_batch(self, runner, tmp_path):
+        """Test setting RectTransform properties with batch mode.
+
+        This verifies the fix for the bug where batch mode with a path ending
+        in a component type (like RectTransform) was incorrectly storing values
+        inline in the GameObject instead of the actual component document.
+        """
+        import shutil
+        from unityflow.parser import UnityYAMLDocument
+
+        # Copy fixture to temp location
+        test_file = tmp_path / "BossSceneUI.prefab"
+        shutil.copy(FIXTURES_DIR / "BossSceneUI.prefab", test_file)
+
+        # Run set command with batch mode on RectTransform
+        # Use Canvas_LeaderboardUI which is a direct child of BossSceneUI and has RectTransform
+        result = runner.invoke(
+            main,
+            [
+                "set",
+                str(test_file),
+                "--path", "BossSceneUI/Canvas_LeaderboardUI/RectTransform",
+                "--batch", '{"m_AnchorMin": {"x": 0.1, "y": 0.2}, "m_SizeDelta": {"x": 50, "y": 100}}',
+            ],
+        )
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Set" in result.output
+
+        # Verify values were set in the actual RectTransform component
+        doc = UnityYAMLDocument.load(test_file)
+
+        # Find the Canvas_LeaderboardUI GameObject
+        target_go = None
+        for go in doc.get_game_objects():
+            content = go.get_content()
+            if content and content.get("m_Name") == "Canvas_LeaderboardUI":
+                target_go = go
+                break
+
+        assert target_go is not None, "Canvas_LeaderboardUI GameObject not found"
+
+        # Get the RectTransform component
+        go_content = target_go.get_content()
+        rect_transform = None
+        for comp_ref in go_content.get("m_Component", []):
+            comp_id = comp_ref.get("component", {}).get("fileID", 0)
+            comp = doc.get_by_file_id(comp_id)
+            if comp and comp.class_name == "RectTransform":
+                rect_transform = comp
+                break
+
+        assert rect_transform is not None, "RectTransform component not found"
+
+        # Verify the values were set in the actual component
+        rt_content = rect_transform.get_content()
+        assert rt_content["m_AnchorMin"]["x"] == 0.1
+        assert rt_content["m_AnchorMin"]["y"] == 0.2
+        assert rt_content["m_SizeDelta"]["x"] == 50
+        assert rt_content["m_SizeDelta"]["y"] == 100
+
+        # Verify values are NOT stored inline in the GameObject
+        assert "RectTransform" not in go_content or not isinstance(go_content.get("RectTransform"), dict), \
+            "Values should not be stored inline in the GameObject"
+
+    def test_set_component_property(self, runner, tmp_path):
+        """Test setting a single property on a component."""
+        import shutil
+
+        test_file = tmp_path / "basic_prefab.prefab"
+        shutil.copy(FIXTURES_DIR / "basic_prefab.prefab", test_file)
+
+        result = runner.invoke(
+            main,
+            [
+                "set",
+                str(test_file),
+                "--path", "BasicPrefab/Transform/m_LocalPosition",
+                "--value", '{"x": 10, "y": 20, "z": 30}',
+            ],
+        )
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Set" in result.output
+
+    def test_set_path_ending_with_transform(self, runner, tmp_path):
+        """Test batch mode with path ending in Transform component."""
+        import shutil
+        from unityflow.parser import UnityYAMLDocument
+
+        test_file = tmp_path / "basic_prefab.prefab"
+        shutil.copy(FIXTURES_DIR / "basic_prefab.prefab", test_file)
+
+        result = runner.invoke(
+            main,
+            [
+                "set",
+                str(test_file),
+                "--path", "BasicPrefab/Transform",
+                "--batch", '{"m_LocalPosition": {"x": 5, "y": 10, "z": 15}}',
+            ],
+        )
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+
+        # Verify value was set in the Transform component
+        doc = UnityYAMLDocument.load(test_file)
+
+        # Find the BasicPrefab GameObject
+        go = None
+        for game_obj in doc.get_game_objects():
+            content = game_obj.get_content()
+            if content and content.get("m_Name") == "BasicPrefab":
+                go = game_obj
+                break
+
+        assert go is not None
+
+        # Find the Transform component
+        go_content = go.get_content()
+        transform = None
+        for comp_ref in go_content.get("m_Component", []):
+            comp_id = comp_ref.get("component", {}).get("fileID", 0)
+            comp = doc.get_by_file_id(comp_id)
+            if comp and comp.class_name == "Transform":
+                transform = comp
+                break
+
+        assert transform is not None
+        t_content = transform.get_content()
+        assert t_content["m_LocalPosition"]["x"] == 5
+        assert t_content["m_LocalPosition"]["y"] == 10
+        assert t_content["m_LocalPosition"]["z"] == 15
